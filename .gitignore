@@ -1,0 +1,10 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+dist/
+*.egg-info/
+.mcp_tmp_*
+.idea/
+PLAN.md
+uv.lock

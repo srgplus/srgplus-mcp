@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "srgplus-mcp"
+version = "0.1.0"
+description = "MCP server for SRG+"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "SRG", email = "support@srg.plus"},
+]
+keywords = ["srg", "mcp", "ai", "claude", "media", "content"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "python-dotenv>=1.0",
+    "mcp[cli]>=1.0",
+    "srgplus>=0.1.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["srg_mcp"]
+
+[project.scripts]
+srgplus-mcp = "srg_mcp.server:main"
