@@ -1,3 +1,3 @@
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("SRG+", dependencies=["srgplus"])
+mcp = FastMCP("SRG+")
