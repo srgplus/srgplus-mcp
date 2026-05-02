@@ -63,6 +63,18 @@ def get_routes() -> list[Route]:
             endpoint=protected_resource_metadata,
             methods=["GET"],
         ),
+        # RFC 9728 §3.1: clients construct the discovery URL by inserting
+        # ``/.well-known/oauth-protected-resource`` between the resource's
+        # host and path. For ``https://mcp.srgplus.com/mcp`` that's
+        # ``https://mcp.srgplus.com/.well-known/oauth-protected-resource/mcp``.
+        # We serve identical metadata at both shapes — the path suffix is
+        # ignored. claude.ai's MCP client tries the path-suffixed URL first;
+        # without this route it 404s and the connector flow stalls.
+        Route(
+            "/.well-known/oauth-protected-resource/{path:path}",
+            endpoint=protected_resource_metadata,
+            methods=["GET"],
+        ),
         Route("/oauth/register", endpoint=register, methods=["POST"]),
         Route("/oauth/authorize", endpoint=authorize_get, methods=["GET"]),
         Route("/oauth/authorize", endpoint=authorize_post, methods=["POST"]),

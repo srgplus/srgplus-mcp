@@ -18,6 +18,7 @@ unrecognized URI.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
@@ -37,6 +38,10 @@ from .jwt_codec import (
     token_signing_key,
 )
 from .store import make_csrf_token, verify_csrf_token
+
+
+def _issuer() -> str:
+    return os.environ.get("OAUTH_ISSUER", "https://mcp.srgplus.com").rstrip("/")
 
 logger = logging.getLogger("srgplus-mcp-serve.oauth")
 
@@ -288,11 +293,24 @@ async def authorize_post(request: Request) -> Response:
     # Build the redirect URL. Note: we ONLY redirect to URIs we already
     # validated against the registered list — that's the open-redirect
     # guarantee.
-    params = {"code": code_jwt}
+    #
+    # ``iss`` (RFC 9207) is included so the client can detect mix-up attacks
+    # where a code from a malicious AS is replayed at a legitimate AS. Some
+    # MCP clients (claude.ai's web wizard included) treat a missing ``iss``
+    # as "unknown AS" and silently abandon the token-exchange step.
+    params = {"code": code_jwt, "iss": _issuer()}
     if state:
         params["state"] = state
     sep = "&" if urlparse(redirect_uri).query else "?"
     location = f"{redirect_uri}{sep}{urlencode(params)}"
+
+    logger.info(
+        "oauth.authorize.success client_id=%s redirect_host=%s code_len=%d state_present=%s",
+        client_id[:16] + "...",
+        urlparse(redirect_uri).netloc,
+        len(code_jwt),
+        bool(state),
+    )
 
     # 302 (Found) is the historical OAuth choice; some legacy clients
     # mishandle 303. Either is spec-compliant.
