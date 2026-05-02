@@ -143,6 +143,22 @@ def _render_consent(
         client_name=client_name,
         error=error,
     )
+    # CSP form-action: must allow the client's redirect_uri origin, otherwise
+    # the browser blocks the post-submit 302 from us → client. (We saw this
+    # break claude.ai's flow: POST 302 fired, browser refused to follow the
+    # cross-origin redirect, no /token call ever happened.) Server-side we
+    # already restrict redirect_uri to registered values, so this only ever
+    # whitelists URLs we'd already redirect to.
+    parsed_redirect = urlparse(redirect_uri)
+    redirect_origin = (
+        f"{parsed_redirect.scheme}://{parsed_redirect.netloc}"
+        if parsed_redirect.scheme and parsed_redirect.netloc
+        else ""
+    )
+    form_action = f"'self' {redirect_origin}".strip()
+    csp = (
+        f"default-src 'self'; style-src 'unsafe-inline'; form-action {form_action}"
+    )
     # Defensive headers: never let consent pages get cached or framed.
     return HTMLResponse(
         html,
@@ -151,7 +167,7 @@ def _render_consent(
             "Cache-Control": "no-store",
             "Pragma": "no-cache",
             "X-Frame-Options": "DENY",
-            "Content-Security-Policy": "default-src 'self'; style-src 'unsafe-inline'; form-action 'self'",
+            "Content-Security-Policy": csp,
             "Referrer-Policy": "no-referrer",
         },
     )
