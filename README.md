@@ -1,8 +1,76 @@
 # srgplus-mcp
 
-MCP server for [SRG+](https://srgplus.app) — lets Claude manage hubs, channels, content, assets, users, and workspaces through the SRG+ API.
+MCP server for [SRG+](https://srgplus.com) — lets Claude (and any MCP-aware
+agent) manage hubs, channels, content, assets, users, and workspaces through
+the SRG+ API.
 
-## Installation
+Two ways to run it:
+
+- **Hosted HTTP** (recommended for production / claude.ai web / Cursor / Cline) — single endpoint, header-based auth, multi-tenant
+- **Local stdio** (for desktop dev / offline) — single user, env-var auth, runs as a child process of the agent
+
+Both modes share the same tools and the same SDK underneath — you pick the
+transport that fits your client.
+
+## Hosted HTTP
+
+### Run the server
+
+```bash
+pip install 'srgplus-mcp[server]'
+srgplus-mcp-serve   # listens on $PORT (default 8090)
+```
+
+Or in Docker:
+
+```bash
+docker build -t srgplus-mcp .
+docker run -p 8090:8090 srgplus-mcp
+```
+
+Health check:
+
+```bash
+curl http://localhost:8090/health
+```
+
+### Connect from Claude / Cursor / any MCP client
+
+```json
+{
+  "mcpServers": {
+    "srgplus": {
+      "url": "http://localhost:8090/mcp",
+      "headers": { "X-API-Key": "srgplus_your_key_here" }
+    }
+  }
+}
+```
+
+Or use `Authorization: Bearer srgplus_...` instead of `X-API-Key` — both work.
+
+For a hosted public endpoint pointed at your SRG+ workspace, the URL becomes
+`https://mcp.srgplus.com/mcp` (rolling out — see SRGDEV-8 follow-ups for the
+deploy plan).
+
+### How auth works
+
+Each request must carry the workspace API key in either header:
+
+- `X-API-Key: srgplus_...`
+- `Authorization: Bearer srgplus_...`
+
+The server doesn't pre-validate the key — it binds it to a `contextvar` and
+lets the SRG+ SDK make the actual call. Bad keys surface as 401 from the
+upstream API on the first tool invocation.
+
+`SRGClient` instances are cached per unique key, so the per-request overhead
+is just a contextvar set/reset.
+
+## Local stdio (developer mode)
+
+Use this when you're building locally against SRG+ and want a child-process
+MCP without running an HTTP server.
 
 ### Claude Desktop
 
@@ -22,23 +90,21 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. The `uvx` command downloads and runs the package automatically — no separate install step needed.
+Restart Claude Desktop. The `uvx` command downloads and runs the package
+automatically — no separate install step needed.
 
 ### Claude Code
 
 ```bash
 claude mcp add srgplus -- uvx srgplus-mcp
-```
-
-Then set the environment variable:
-
-```bash
 export SRG_API_KEY=srgplus_your_key_here
 ```
 
 ## Getting an API key
 
-Log in to SRG+, go to **Settings → Workspaces → Select Workspace → API Keys**, and create a new key.
+Log in to SRG+ → **Settings → Workspaces → Select Workspace → API Keys** →
+create a new key. Use the same key for both stdio (`SRG_API_KEY` env var) and
+hosted HTTP (`X-API-Key` header).
 
 ## Available tools
 
