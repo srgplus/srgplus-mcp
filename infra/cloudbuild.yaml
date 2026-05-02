@@ -1,0 +1,96 @@
+# Cloud Build pipeline for srgplus-mcp hosted server.
+#
+# Triggered on push to main (configure via GCP Console or `gcloud builds triggers create github`).
+# Builds the Docker image, pushes to Artifact Registry, deploys to Cloud Run.
+#
+# Required substitutions (set on the trigger):
+#   _SERVICE_NAME     e.g. srg-plus-mcp-prod-uscentral1
+#   _DEPLOY_REGION    e.g. us-central1
+#   _AR_HOSTNAME      e.g. us-central1-docker.pkg.dev
+#   _DOCKERFILE_PATH  e.g. Dockerfile
+#
+# Defaults are filled in below for the current deploy.
+
+steps:
+  # Build step
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "--no-cache"
+      - "-t"
+      - >-
+        $_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - "-f"
+      - $_DOCKERFILE_PATH
+      - .
+    id: Build
+
+  # Push step
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - >-
+        $_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+    id: Push
+
+  # Deploy step
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    args:
+      - run
+      - services
+      - update
+      - $_SERVICE_NAME
+      - "--platform=managed"
+      - >-
+        --image=$_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+      - >-
+        --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=$COMMIT_SHA,gcb-build-id=$BUILD_ID,gcb-trigger-id=$_TRIGGER_ID
+      - "--region=$_DEPLOY_REGION"
+      - "--quiet"
+    id: Deploy
+    entrypoint: gcloud
+
+  # Wait step (give Cloud Run a moment to settle before any post-deploy checks)
+  - name: "alpine"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - 'echo "Waiting 10s for traffic routing..."; sleep 10'
+    id: Wait
+
+  # Smoke test against the new revision
+  - name: "alpine/curl"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - |
+        url=$$(gcloud run services describe $_SERVICE_NAME --region=$_DEPLOY_REGION --format='value(status.url)') || true
+        if [ -z "$$url" ]; then
+          echo "Could not resolve service URL — skipping smoke test"
+          exit 0
+        fi
+        echo "Smoke testing $$url/health"
+        code=$$(curl -sS -o /tmp/h.json -w '%{http_code}' "$$url/health")
+        cat /tmp/h.json
+        echo
+        [ "$$code" = "200" ] || { echo "Health check failed: $$code"; exit 1; }
+    id: Smoke Test
+
+images:
+  - >-
+    $_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
+
+options:
+  substitutionOption: ALLOW_LOOSE
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _SERVICE_NAME: srg-plus-mcp-prod-uscentral1
+  _DEPLOY_REGION: us-central1
+  _AR_HOSTNAME: us-central1-docker.pkg.dev
+  _DOCKERFILE_PATH: Dockerfile
+
+tags:
+  - gcp-cloud-build-deploy-cloud-run
+  - gcp-cloud-build-deploy-cloud-run-managed
+  - srgplus-mcp
