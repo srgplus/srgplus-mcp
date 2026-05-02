@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Connect to SRG+</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --card: #15181d;
+      --text: #f5f7fa;
+      --muted: #8b95a3;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --error: #ef4444;
+      --border: #262a31;
+      --input-bg: #0f1216;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #fff;
+    }
+    .brand-name {
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 16px 0 8px;
+    }
+    p {
+      color: var(--muted);
+      margin: 0 0 16px;
+    }
+    .client {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .client-name {
+      color: var(--text);
+      font-weight: 500;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 12px 0 6px;
+    }
+    input[type="password"] {
+      width: 100%;
+      padding: 12px 14px;
+      background: var(--input-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="password"]:focus {
+      border-color: var(--accent);
+    }
+    .error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 12px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    .help {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .help a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .help a:hover { text-decoration: underline; }
+    .scope {
+      margin: 16px 0;
+      padding: 12px 14px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .scope strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <main class="card">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div class="brand-name">SRG+</div>
+      </div>
+      <h1>Connect to SRG+</h1>
+      <p>
+        <span class="client-name">{{ client_name }}</span> wants to access your SRG+ workspace.
+      </p>
+
+      <div class="scope">
+        Granting <strong>full access</strong> to your workspace: hub profiles, channels, content, assets, users, and settings.
+      </div>
+
+      {% if error %}
+      <div class="error">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/oauth/authorize" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="client_id" value="{{ client_id }}">
+        <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
+        <input type="hidden" name="response_type" value="{{ response_type }}">
+        <input type="hidden" name="code_challenge" value="{{ code_challenge }}">
+        <input type="hidden" name="code_challenge_method" value="{{ code_challenge_method }}">
+        <input type="hidden" name="state" value="{{ state }}">
+        <input type="hidden" name="scope" value="{{ scope }}">
+
+        <label for="api_key">SRG+ Workspace API Key</label>
+        <input
+          type="password"
+          id="api_key"
+          name="api_key"
+          placeholder="srgplus_..."
+          autofocus
+          spellcheck="false"
+          autocomplete="off"
+          required>
+
+        <button type="submit">Authorize</button>
+      </form>
+
+      <div class="help">
+        Don't have an API key?
+        <a href="https://srgplus.com" target="_blank" rel="noopener noreferrer">
+          Get one at SRG+ Settings → API Keys
+        </a>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

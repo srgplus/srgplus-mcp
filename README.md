@@ -53,6 +53,49 @@ For a hosted public endpoint pointed at your SRG+ workspace, the URL becomes
 `https://mcp.srgplus.com/mcp` (rolling out — see SRGDEV-8 follow-ups for the
 deploy plan).
 
+## OAuth (claude.ai web, Connectors Gallery, ChatGPT Apps)
+
+For browser-based clients that require OAuth 2.1 (DCR + PKCE):
+
+1. In claude.ai → **Settings → Connectors → Add custom connector**
+2. URL: `https://mcp.srgplus.com/mcp`
+3. Leave OAuth fields empty — the wizard will discover, DCR-register, and
+   redirect to a consent page
+4. On the consent page: paste your SRG+ workspace API key
+5. Tools appear in claude.ai
+
+Endpoints exposed (all under the same hostname as `/mcp`):
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/.well-known/oauth-authorization-server` | RFC 8414 metadata |
+| `/.well-known/oauth-protected-resource` | RFC 9728 metadata |
+| `/oauth/register` | RFC 7591 Dynamic Client Registration |
+| `/oauth/authorize` | Authorization endpoint with consent page |
+| `/oauth/token` | Token endpoint (PKCE S256 required) |
+| `/oauth/revoke` | RFC 7009 revocation |
+
+**Backwards compatibility:** the `X-API-Key` header and `Authorization:
+Bearer srgplus_...` flows from above still work. OAuth tokens (RFC-shaped
+JWTs) are detected automatically when the bearer value doesn't start with
+`srgplus_`.
+
+### Production secrets
+
+In production, set these via GCP Secret Manager so token state survives
+process restarts:
+
+| Env var | Purpose |
+|---------|---------|
+| `OAUTH_ISSUER` | Canonical issuer URL (e.g. `https://mcp.srgplus.com`) |
+| `OAUTH_CLIENT_REGISTRATION_KEY` | HMAC key for DCR `client_id` JWTs |
+| `OAUTH_TOKEN_SIGNING_KEY` | HMAC key for codes/access/refresh tokens |
+| `OAUTH_API_KEY_ENCRYPTION_KEY` | 32-byte AES-GCM key (base64url) for wrapping the SRG+ workspace api_key inside JWTs |
+
+If any are unset the server generates an ephemeral random key per process —
+fine for local development, but every process restart invalidates all
+in-flight authorizations.
+
 ### How auth works
 
 Each request must carry the workspace API key in either header:

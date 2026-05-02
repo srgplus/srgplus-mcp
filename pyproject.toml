@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "srgplus-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware agent."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,6 +33,18 @@ dependencies = [
 server = [
     "starlette>=0.40.0",
     "uvicorn[standard]>=0.30.0",
+    # OAuth 2.1 layer (SRGDEV-26):
+    # - pyjwt: HS256 sign/verify for client_id, codes, access/refresh tokens
+    # - cryptography: AES-256-GCM for the wrapped api_key inside JWTs
+    # - cachetools: TTL+LRU caches for CSRF tokens, code one-time-use deny
+    #   list, and access/refresh token revocation deny-list
+    # - jinja2: render the branded /oauth/authorize consent page
+    # - python-multipart: parse application/x-www-form-urlencoded at /oauth/*
+    "pyjwt[crypto]>=2.8",
+    "cryptography>=42.0",
+    "cachetools>=5.0",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.urls]
@@ -44,6 +56,15 @@ Issues = "https://github.com/srgplus/srgplus-mcp/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["srg_mcp"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"srg_mcp/serve/oauth/consent.html" = "srg_mcp/serve/oauth/consent.html"
+
 [project.scripts]
 srgplus-mcp = "srg_mcp.server:main"
 srgplus-mcp-serve = "srg_mcp.serve.main:run"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]

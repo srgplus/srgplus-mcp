@@ -6,6 +6,16 @@ into the SDK's per-request contextvar via ``SRGClient.use_api_key`` for the
 duration of the request, and lets the upstream srg_mcp tools share a single
 ``SRGClient`` (and therefore a single ``httpx`` connection pool).
 
+Three accepted credential formats:
+
+* ``X-API-Key: srgplus_...`` — original header, still works
+* ``Authorization: Bearer srgplus_...`` — original header, still works
+* ``Authorization: Bearer <jwt>``  — OAuth 2.1 access token (new in 0.4.0)
+
+The OAuth layer is implemented in :mod:`srg_mcp.serve.oauth`. It exposes a
+DCR endpoint, authorize page, token endpoint, and revocation — together
+enough for claude.ai web's Custom Connector wizard to onboard a user.
+
 Run locally:
 
     pip install 'srgplus-mcp[server]'
@@ -15,7 +25,7 @@ or:
 
     python -m srg_mcp.serve.main
 
-Connect from Claude Desktop / Claude Code:
+Connect from Claude Desktop / Claude Code (header auth):
 
     {
       "mcpServers": {
@@ -25,6 +35,10 @@ Connect from Claude Desktop / Claude Code:
         }
       }
     }
+
+Connect from claude.ai web (OAuth auto-discovery):
+
+    Settings → Connectors → Add custom connector → URL: https://mcp.srgplus.com/mcp
 """
 from __future__ import annotations
 
@@ -76,6 +90,8 @@ import srg_mcp.permission_groups  # noqa: F401, E402
 import srg_mcp.users  # noqa: F401, E402
 import srg_mcp.workspaces  # noqa: F401, E402
 
+from srg_mcp.serve import oauth  # noqa: E402
+
 
 logger = logging.getLogger("srgplus-mcp-serve")
 
@@ -96,6 +112,10 @@ except PackageNotFoundError:
     _SERVER_VERSION = "0.0.0+unknown"
 
 
+def _issuer() -> str:
+    return os.environ.get("OAUTH_ISSUER", "https://mcp.srgplus.com").rstrip("/")
+
+
 async def health(request: Request) -> JSONResponse:
     return JSONResponse(
         {
@@ -104,6 +124,7 @@ async def health(request: Request) -> JSONResponse:
             "version": _SERVER_VERSION,
             "transport": "streamable-http",
             "tool_count": len(await mcp.list_tools()),
+            "oauth": True,
         }
     )
 
@@ -117,32 +138,48 @@ def _bearer_token(auth_header: str | None) -> str | None:
     return None
 
 
-async def _send_json(send, status: int, body: dict) -> None:
-    payload = json.dumps(body).encode()
-    await send(
-        {
-            "type": "http.response.start",
-            "status": status,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(payload)).encode()),
-            ],
-        }
+def _www_authenticate_header() -> tuple[bytes, bytes]:
+    """The WWW-Authenticate header pointing clients at our AS metadata.
+
+    Per the MCP Authorization spec (2025-06-18), 401 responses on the MCP
+    endpoint should advertise the AS so well-behaved clients can discover
+    where to authenticate.
+    """
+    iss = _issuer()
+    value = (
+        f'Bearer realm="{iss}/mcp", '
+        f'as_uri="{iss}/.well-known/oauth-authorization-server"'
     )
+    return (b"www-authenticate", value.encode())
+
+
+async def _send_json(send, status: int, body: dict, *, extra_headers: list | None = None) -> None:
+    payload = json.dumps(body).encode()
+    headers = [
+        (b"content-type", b"application/json"),
+        (b"content-length", str(len(payload)).encode()),
+    ]
+    if extra_headers:
+        headers.extend(extra_headers)
+    await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": payload})
 
 
 class _MCPEndpoint:
     """ASGI app that authenticates the request and runs the MCP session.
 
-    Auth is intentionally lazy: we don't pre-validate the api_key against the
-    SRG+ API — we just bind whatever the client sent and let the SDK return a
-    401 on the first tool call if the key is bad. That keeps this layer thin
-    and avoids an extra round-trip per request.
+    Auth precedence (first match wins):
 
-    Starlette's `Route` treats a callable instance with a 3-arg ASGI signature
-    as a raw ASGI app, which is what we need to forward (scope, receive, send)
-    straight into the MCP StreamableHTTPSessionManager.
+    1. ``X-API-Key`` header — raw SRG+ workspace api_key (legacy/header path)
+    2. ``Authorization: Bearer srgplus_...`` — raw SRG+ workspace api_key
+    3. ``Authorization: Bearer <jwt>`` — OAuth 2.1 access token issued by us
+
+    For (1) and (2) we don't pre-validate against SRG+ — the SDK's first call
+    raises 401 if the key is bad. For (3) we verify the JWT (signature, exp,
+    aud, iss, jti deny-list) and decrypt the wrapped api_key.
+
+    On 401 we include a ``WWW-Authenticate`` header pointing at our AS
+    metadata so MCP clients that follow the discovery spec can find us.
     """
 
     async def __call__(self, scope, receive, send) -> None:
@@ -152,10 +189,24 @@ class _MCPEndpoint:
         headers = {
             k.decode().lower(): v.decode() for k, v in scope.get("headers") or []
         }
-        # Strip both header values consistently — Bearer-stripping happens in
-        # _bearer_token, so do the same for raw X-API-Key here.
         x_api_key = (headers.get("x-api-key") or "").strip()
-        api_key = x_api_key or _bearer_token(headers.get("authorization"))
+        bearer = _bearer_token(headers.get("authorization"))
+
+        api_key: str | None = None
+        if x_api_key:
+            api_key = x_api_key
+        elif bearer:
+            # Distinguish raw api_key (legacy) from OAuth JWT. SRG+ workspace
+            # keys are prefixed ``srgplus_`` — JWTs have three dot-separated
+            # base64url segments. Prefix check first (cheap), JWT verify
+            # second (only when prefix doesn't match).
+            if bearer.startswith("srgplus_"):
+                api_key = bearer
+            else:
+                try:
+                    api_key = oauth.verify_access_token(bearer)
+                except oauth.OAuthError:
+                    api_key = None
 
         if not api_key:
             await _send_json(
@@ -165,9 +216,11 @@ class _MCPEndpoint:
                     "error": "missing_api_key",
                     "message": (
                         "Provide your SRG+ workspace API key via "
-                        "'X-API-Key' header or 'Authorization: Bearer <key>'."
+                        "'X-API-Key' header, 'Authorization: Bearer srgplus_...', "
+                        "or an OAuth Bearer access token from /oauth/token."
                     ),
                 },
+                extra_headers=[_www_authenticate_header()],
             )
             return
 
@@ -184,6 +237,24 @@ async def lifespan(app: Starlette):
         yield
 
 
+# CORS strategy:
+# - /mcp accepts cross-origin POST WITHOUT cookies — wildcard origin is safe
+#   here and necessary for arbitrary MCP clients in arbitrary browsers.
+# - OAuth endpoints are browser-driven via claude.ai's wizard. We allow the
+#   anthropic origins explicitly (wildcard + credentials would be rejected by
+#   browsers even though we don't set cookies — being explicit is cleaner).
+#
+# We use a single CORS middleware with a wildcard since none of our endpoints
+# set credentials. The OAuth endpoints render HTML/redirect/JSON — claude.ai's
+# wizard runs in the browser and follows redirects, no preflight needed for
+# top-level navigations. The CORS preflight only matters for the JSON
+# endpoints (/oauth/register, /oauth/token, /oauth/revoke) — and for those,
+# claude.ai sends Origin: https://claude.ai which * accepts.
+_CORS_ALLOW_ORIGINS = ["*"]
+_CORS_ALLOW_HEADERS = ["content-type", "authorization", "x-api-key", "mcp-session-id"]
+_CORS_EXPOSE_HEADERS = ["mcp-session-id", "www-authenticate"]
+
+
 app = Starlette(
     routes=[
         Route("/health", endpoint=health, methods=["GET"]),
@@ -192,14 +263,15 @@ app = Starlette(
             endpoint=mcp_endpoint,
             methods=["GET", "POST", "DELETE"],
         ),
+        *oauth.get_routes(),
     ],
     middleware=[
         Middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=_CORS_ALLOW_ORIGINS,
             allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-            allow_headers=["*"],
-            expose_headers=["mcp-session-id"],
+            allow_headers=_CORS_ALLOW_HEADERS,
+            expose_headers=_CORS_EXPOSE_HEADERS,
         ),
     ],
     lifespan=lifespan,
