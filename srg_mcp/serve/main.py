@@ -31,6 +31,7 @@ import contextlib
 import json
 import logging
 import os
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 import uvicorn
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -72,12 +73,18 @@ _session_manager = StreamableHTTPSessionManager(
 )
 
 
+try:
+    _SERVER_VERSION = _pkg_version("srgplus-mcp")
+except PackageNotFoundError:
+    _SERVER_VERSION = "0.0.0+unknown"
+
+
 async def health(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "status": "ok",
             "service": "srg-mcp-server",
-            "version": "0.2.0",
+            "version": _SERVER_VERSION,
             "transport": "streamable-http",
             "tool_count": len(await mcp.list_tools()),
         }
@@ -128,9 +135,10 @@ class _MCPEndpoint:
         headers = {
             k.decode().lower(): v.decode() for k, v in scope.get("headers") or []
         }
-        api_key = headers.get("x-api-key") or _bearer_token(
-            headers.get("authorization")
-        )
+        # Strip both header values consistently — Bearer-stripping happens in
+        # _bearer_token, so do the same for raw X-API-Key here.
+        x_api_key = (headers.get("x-api-key") or "").strip()
+        api_key = x_api_key or _bearer_token(headers.get("authorization"))
 
         if not api_key:
             await _send_json(

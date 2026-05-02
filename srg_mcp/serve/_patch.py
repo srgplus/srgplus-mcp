@@ -52,10 +52,13 @@ def _contextual_get_client() -> srg.SRGClient:
             "Did the X-API-Key middleware run?"
         ) from exc
 
+    # setdefault avoids a TOCTOU race where two concurrent first-hits for the
+    # same key would each construct an SRGClient — only one wins the cache,
+    # the other is GC'd. Cheap to construct, but the race wastes a workspace
+    # bootstrap round-trip.
     client = _client_cache.get(key)
     if client is None:
-        client = srg.SRGClient(api_key=key)
-        _client_cache[key] = client
+        client = _client_cache.setdefault(key, srg.SRGClient(api_key=key))
     return client
 
 
