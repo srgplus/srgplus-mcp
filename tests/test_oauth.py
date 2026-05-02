@@ -116,7 +116,6 @@ async def client(_lifespan):
 @pytest.fixture(autouse=True)
 def reset_state():
     """Clear all in-memory caches between tests."""
-    store_module.csrf_tokens.clear()
     store_module.code_deny_list.clear()
     store_module.token_deny_list.clear()
     yield
@@ -429,7 +428,14 @@ async def test_authorize_post_invalid_csrf_rerenders(client, srg_mock):
 
 
 @pytest.mark.asyncio
-async def test_authorize_post_csrf_is_one_shot(client, srg_mock):
+async def test_authorize_post_csrf_is_stateless_across_instances(client, srg_mock):
+    """A CSRF token issued by one instance must verify on another.
+
+    We simulate the multi-instance case by clearing process-local state
+    between the GET (consent page) and POST (form submit). Pre-fix this
+    rendered the token unverifiable because it lived in an in-memory cache;
+    with HMAC-signed stateless tokens, verification works regardless.
+    """
     client_id = await _register(client)
     r = await client.get(
         "/oauth/authorize",
@@ -443,7 +449,10 @@ async def test_authorize_post_csrf_is_one_shot(client, srg_mock):
         },
     )
     csrf = _consent_csrf(r.text)
-    # First POST consumes the token
+    # Simulate the POST landing on a different Cloud Run instance: any
+    # process-local caches that existed for the GET are gone.
+    store_module.code_deny_list.clear()
+    store_module.token_deny_list.clear()
     r1 = await client.post(
         "/oauth/authorize",
         data={
@@ -459,23 +468,6 @@ async def test_authorize_post_csrf_is_one_shot(client, srg_mock):
         },
     )
     assert r1.status_code == 302
-    # Replay must fail
-    r2 = await client.post(
-        "/oauth/authorize",
-        data={
-            "csrf_token": csrf,
-            "client_id": client_id,
-            "redirect_uri": REDIRECT_URI,
-            "response_type": "code",
-            "code_challenge": _s256("v" * 50),
-            "code_challenge_method": "S256",
-            "state": "x",
-            "scope": "mcp:full",
-            "api_key": "srgplus_validkey",
-        },
-    )
-    assert r2.status_code == 200
-    assert "expired" in r2.text.lower()
 
 
 @pytest.mark.asyncio

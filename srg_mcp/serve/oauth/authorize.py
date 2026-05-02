@@ -36,7 +36,7 @@ from .jwt_codec import (
     random_token,
     token_signing_key,
 )
-from .store import consume_csrf, remember_csrf
+from .store import make_csrf_token, verify_csrf_token
 
 logger = logging.getLogger("srgplus-mcp-serve.oauth")
 
@@ -124,8 +124,7 @@ def _render_consent(
     client_name: str,
     error: str | None = None,
 ) -> HTMLResponse:
-    csrf_token = random_token(24)
-    remember_csrf(csrf_token)
+    csrf_token = make_csrf_token()
     template = _jinja.get_template("consent.html")
     html = template.render(
         csrf_token=csrf_token,
@@ -223,9 +222,9 @@ async def authorize_post(request: Request) -> Response:
     except OAuthError as e:
         return _error_html(e.description, status=e.status)
 
-    # CSRF is required before we'll consider the api_key. consume_csrf is
-    # one-shot — replays of the same form are rejected.
-    if not consume_csrf(csrf_token):
+    # CSRF is required before we'll consider the api_key. The token is
+    # stateless (HMAC-signed) so it verifies on any Cloud Run instance.
+    if not verify_csrf_token(csrf_token):
         # Issue a fresh CSRF token on the rerender so the user can retry.
         return _render_consent(
             client_id=client_id,
