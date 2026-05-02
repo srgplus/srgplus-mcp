@@ -20,12 +20,18 @@ import importlib
 
 import srg
 import srg_mcp._client
+from cachetools import LRUCache
 
 
 _current_key_var: contextvars.ContextVar[str] = contextvars.ContextVar(
     "srg_current_key"
 )
-_client_cache: dict[str, srg.SRGClient] = {}
+# Bounded LRU keeps memory growth predictable when many distinct workspace
+# api_keys hit the same revision. cachetools.LRUCache is not threadsafe, but
+# this server is single-process async (one Cloud Run revision per worker) and
+# request isolation comes from contextvars, so no lock is needed here.
+_CLIENT_CACHE_MAXSIZE = 512
+_client_cache: LRUCache[str, srg.SRGClient] = LRUCache(maxsize=_CLIENT_CACHE_MAXSIZE)
 
 
 def set_current_key(api_key: str) -> contextvars.Token:
@@ -52,13 +58,10 @@ def _contextual_get_client() -> srg.SRGClient:
             "Did the X-API-Key middleware run?"
         ) from exc
 
-    # setdefault avoids a TOCTOU race where two concurrent first-hits for the
-    # same key would each construct an SRGClient — only one wins the cache,
-    # the other is GC'd. Cheap to construct, but the race wastes a workspace
-    # bootstrap round-trip.
     client = _client_cache.get(key)
     if client is None:
-        client = _client_cache.setdefault(key, srg.SRGClient(api_key=key))
+        client = srg.SRGClient(api_key=key)
+        _client_cache[key] = client
     return client
 
 

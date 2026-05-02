@@ -12,11 +12,14 @@
 # Defaults are filled in below for the current deploy.
 
 steps:
-  # Build step
+  # Build step.
+  # Note: Cloud Build runs each step in a fresh worker, so the local layer
+  # cache is empty anyway and `--no-cache` would be a no-op here. If we ever
+  # want real caching across builds we'd need kaniko or buildx with a
+  # registry-backed cache (separate tech-debt ticket).
   - name: gcr.io/cloud-builders/docker
     args:
       - build
-      - "--no-cache"
       - "-t"
       - >-
         $_AR_HOSTNAME/$PROJECT_ID/cloud-run-source-deploy/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
