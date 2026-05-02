@@ -7,10 +7,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
-COPY srg_mcp/ ./srg_mcp/
+# Create non-root user before copying so we can chown in COPY (one layer).
+RUN useradd --create-home --shell /bin/bash --uid 10001 appuser
+
+COPY --chown=appuser:appuser pyproject.toml README.md ./
+COPY --chown=appuser:appuser srg_mcp/ ./srg_mcp/
 
 RUN pip install ".[server]"
+
+USER appuser
 
 EXPOSE 8090
 ENV PORT=8090

@@ -22,7 +22,10 @@ classifiers = [
 ]
 dependencies = [
     "python-dotenv>=1.0",
-    "mcp[cli]>=1.0",
+    # Upper-bound mcp until we confirm 2.x is compatible — we depend on the
+    # private `mcp._mcp_server` attribute in serve/main.py, which any major
+    # version bump could break without warning.
+    "mcp[cli]>=1.0,<2.0",
     "srgplus>=0.1.3",
 ]
 
@@ -30,6 +33,7 @@ dependencies = [
 server = [
     "starlette>=0.40.0",
     "uvicorn[standard]>=0.30.0",
+    "cachetools>=5.0",
 ]
 
 [project.urls]
