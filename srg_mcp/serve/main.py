@@ -48,7 +48,6 @@ import logging
 import os
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
-import srg
 import uvicorn
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
@@ -58,26 +57,23 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-# Build a single base SRGClient with no default api_key — its httpx.Client is
-# the shared connection pool used across all incoming requests. Each request
-# binds its own api_key via ``base_client.use_api_key(...)`` (a contextvar
-# scope inside the SDK), so the same ``hub_profiles.list()`` call resolves
-# different workspaces depending on which request context it runs in.
+# Multi-tenant client strategy: the SDK's ``SRGClient`` bakes ``workspace_id``
+# into its ``hub_profiles`` / ``workspaces`` resources via
+# ``@cached_property`` — so a single shared client cannot serve two
+# workspaces correctly (the first key's workspace_id gets cached and every
+# subsequent key inherits it, producing requests like
+# ``/api/v1/workspaces/None/hub-profiles`` → 401).
 #
-# We seed ``srg_mcp._client._client`` directly so the lazy ``get_client()``
-# helper used by every tool module returns this shared instance — no
-# monkey-patching required. We do this BEFORE importing the tool modules so
-# they pick up the seeded singleton on first call.
+# Instead, ``srg_mcp._client.get_client()`` returns a per-api_key
+# ``SRGClient`` from an LRU cache. Each request binds its api_key into
+# ``_current_key_var`` here in ``main`` (after Bearer/JWT validation) and
+# the tools' ``get_client()`` calls resolve to the right tenant.
 import srg_mcp._client as _srg_mcp_client  # noqa: E402
 
-# Strip any ambient SRG_API_KEY from the env so the base client doesn't pick
-# it up as a default (the SDK falls back to that env var when api_key is None).
-# The hosted server is multi-tenant — it must never have a default key, every
-# request brings its own.
+# Strip any ambient SRG_API_KEY from the env so the per-request lookup never
+# falls back to it. The hosted server is multi-tenant — it must never have
+# a default key, every request brings its own.
 os.environ.pop("SRG_API_KEY", None)
-
-_base_client = srg.SRGClient()  # no api_key — keys come per-request
-_srg_mcp_client._client = _base_client
 
 # Now safe to import the tool modules — their @mcp.tool() decorators register
 # on the shared FastMCP instance.
@@ -224,23 +220,24 @@ class _MCPEndpoint:
             )
             return
 
-        # Diagnostic: log how the api_key was acquired and a non-leaking
-        # prefix so we can correlate with what the user thinks they entered.
-        # Strip after the cause is fully understood.
+        # Lightweight observability: how the key was acquired + non-leaking
+        # prefix. Useful when triaging "tool returns 401" reports.
         auth_path = (
             "x-api-key" if x_api_key
             else "bearer-raw" if (bearer and bearer.startswith("srgplus_"))
             else "bearer-jwt"
         )
+        prefix = api_key[:12] + "..." if len(api_key) > 12 else api_key
         logger.info(
             "mcp.auth path=%s api_key_prefix=%s api_key_len=%d",
-            auth_path,
-            api_key[:12] + "..." if len(api_key) > 12 else api_key,
-            len(api_key),
+            auth_path, prefix, len(api_key),
         )
 
-        with _base_client.use_api_key(api_key):
+        token = _srg_mcp_client.set_current_api_key(api_key)
+        try:
             await _session_manager.handle_request(scope, receive, send)
+        finally:
+            _srg_mcp_client.reset_current_api_key(token)
 
 
 mcp_endpoint = _MCPEndpoint()
