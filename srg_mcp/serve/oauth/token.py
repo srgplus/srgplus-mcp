@@ -115,6 +115,19 @@ async def token(request: Request) -> Response:
     try:
         form = await request.form()
         grant_type = form.get("grant_type", "")
+        # Trace what the client is sending — useful when diagnosing why a
+        # client (claude.ai etc.) reaches /authorize but never /token.
+        # We log presence-only flags to avoid leaking the code or verifier.
+        logger.info(
+            "oauth.token.request grant_type=%s has_code=%s has_verifier=%s "
+            "has_client_id=%s has_redirect_uri=%s has_refresh=%s",
+            grant_type or "(missing)",
+            bool(form.get("code")),
+            bool(form.get("code_verifier")),
+            bool(form.get("client_id")),
+            bool(form.get("redirect_uri")),
+            bool(form.get("refresh_token")),
+        )
 
         if grant_type == "authorization_code":
             return _handle_code_grant(form)
@@ -123,6 +136,7 @@ async def token(request: Request) -> Response:
         else:
             raise UnsupportedGrantType()
     except OAuthError as e:
+        logger.info("oauth.token.error error=%s status=%d", e.code, e.status)
         return JSONResponse(e.to_dict(), status_code=e.status, headers={"Cache-Control": "no-store"})
 
 
