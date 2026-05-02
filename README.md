@@ -60,12 +60,14 @@ Each request must carry the workspace API key in either header:
 - `X-API-Key: srgplus_...`
 - `Authorization: Bearer srgplus_...`
 
-The server doesn't pre-validate the key — it binds it to a `contextvar` and
-lets the SRG+ SDK make the actual call. Bad keys surface as 401 from the
-upstream API on the first tool invocation.
+The server doesn't pre-validate the key — it binds it to the SDK's
+per-request contextvar via `SRGClient.use_api_key(...)` and lets the SRG+
+SDK make the actual call. Bad keys surface as 401 from the upstream API on
+the first tool invocation.
 
-`SRGClient` instances are cached per unique key, so the per-request overhead
-is just a contextvar set/reset.
+A single shared `SRGClient` (and therefore a single `httpx` connection pool)
+serves every request, so the per-request overhead is just a contextvar
+set/reset — no per-key client construction or cache.
 
 ## Local stdio (developer mode)
 

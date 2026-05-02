@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "srgplus-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware agent."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,14 +26,13 @@ dependencies = [
     # private `mcp._mcp_server` attribute in serve/main.py, which any major
     # version bump could break without warning.
     "mcp[cli]>=1.0,<2.0",
-    "srgplus>=0.1.3",
+    "srgplus>=0.2.0",
 ]
 
 [project.optional-dependencies]
 server = [
     "starlette>=0.40.0",
     "uvicorn[standard]>=0.30.0",
-    "cachetools>=5.0",
 ]
 
 [project.urls]
