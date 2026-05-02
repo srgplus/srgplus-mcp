@@ -224,6 +224,21 @@ class _MCPEndpoint:
             )
             return
 
+        # Diagnostic: log how the api_key was acquired and a non-leaking
+        # prefix so we can correlate with what the user thinks they entered.
+        # Strip after the cause is fully understood.
+        auth_path = (
+            "x-api-key" if x_api_key
+            else "bearer-raw" if (bearer and bearer.startswith("srgplus_"))
+            else "bearer-jwt"
+        )
+        logger.info(
+            "mcp.auth path=%s api_key_prefix=%s api_key_len=%d",
+            auth_path,
+            api_key[:12] + "..." if len(api_key) > 12 else api_key,
+            len(api_key),
+        )
+
         with _base_client.use_api_key(api_key):
             await _session_manager.handle_request(scope, receive, send)
 
