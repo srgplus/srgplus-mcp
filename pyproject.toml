@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "srgplus-mcp"
-version = "0.1.1"
-description = "MCP server for SRG+"
+version = "0.2.0"
+description = "MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware agent."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -26,8 +26,21 @@ dependencies = [
     "srgplus>=0.1.3",
 ]
 
+[project.optional-dependencies]
+server = [
+    "starlette>=0.40.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.urls]
+Homepage = "https://srgplus.com"
+Documentation = "https://github.com/srgplus/srgplus-mcp#readme"
+Repository = "https://github.com/srgplus/srgplus-mcp"
+Issues = "https://github.com/srgplus/srgplus-mcp/issues"
+
 [tool.hatch.build.targets.wheel]
 packages = ["srg_mcp"]
 
 [project.scripts]
 srgplus-mcp = "srg_mcp.server:main"
+srgplus-mcp-serve = "srg_mcp.serve.main:run"
