@@ -47,6 +47,7 @@ import json
 import logging
 import os
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from pathlib import Path
 
 import uvicorn
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -54,7 +55,7 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 # Multi-tenant client strategy: the SDK's ``SRGClient`` bakes ``workspace_id``
@@ -243,6 +244,63 @@ class _MCPEndpoint:
 mcp_endpoint = _MCPEndpoint()
 
 
+# ----------------------------------------------------------------- Static assets
+#
+# We ship a small set of branding assets (logo PNGs + favicon) so claude.ai's
+# Custom Connector card and any browser tab that loads /oauth/authorize show
+# the SRG+ mark instead of a default globe. Files live in ``serve/static/``
+# and are bundled into the wheel via ``[tool.hatch.build.targets.wheel.force-include]``.
+#
+# A whitelist (rather than ``StaticFiles``) is used here because:
+# - Only a handful of files exist; enumerating them is trivial.
+# - It eliminates path traversal as a concern — a request for an unknown
+#   filename returns 404 without ever touching the filesystem.
+# - Each file gets an explicit content-type without relying on extension
+#   sniffing.
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+_STATIC_FILES: dict[str, str] = {
+    "icon.png": "image/png",
+    "icon-32.png": "image/png",
+    "icon-192.png": "image/png",
+    "icon-512.png": "image/png",
+    "favicon.ico": "image/vnd.microsoft.icon",
+}
+# Browsers and CDNs cache aggressively for branding assets — 24h is fine; if
+# we re-skin we'll bump the URL or the version.
+_STATIC_CACHE_CONTROL = "public, max-age=86400"
+
+
+def _static_response(filename: str) -> Response:
+    """Serve a whitelisted static asset, or 404."""
+    media_type = _STATIC_FILES.get(filename)
+    if media_type is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    path = _STATIC_DIR / filename
+    if not path.is_file():
+        # Should never happen in a properly built wheel, but fail safe rather
+        # than 500ing if someone deleted the file from the install.
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    return FileResponse(
+        path,
+        media_type=media_type,
+        headers={
+            "Cache-Control": _STATIC_CACHE_CONTROL,
+            # CORSMiddleware already adds Access-Control-Allow-Origin: * to
+            # responses for cross-origin GETs, but FileResponse goes through
+            # the same middleware chain so claude.ai can <img src=...> us
+            # without preflight.
+        },
+    )
+
+
+async def favicon(request: Request) -> Response:
+    return _static_response("favicon.ico")
+
+
+async def static_asset(request: Request) -> Response:
+    return _static_response(request.path_params["filename"])
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
     async with _session_manager.run():
@@ -275,6 +333,8 @@ app = Starlette(
             endpoint=mcp_endpoint,
             methods=["GET", "POST", "DELETE"],
         ),
+        Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
+        Route("/static/{filename}", endpoint=static_asset, methods=["GET"]),
         *oauth.get_routes(),
     ],
     middleware=[

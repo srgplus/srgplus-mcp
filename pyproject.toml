@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "srgplus-mcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware agent."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -57,7 +57,18 @@ Issues = "https://github.com/srgplus/srgplus-mcp/issues"
 packages = ["srg_mcp"]
 
 [tool.hatch.build.targets.wheel.force-include]
+# consent.html and the branding assets are non-Python files inside the
+# package; listing them here is belt-and-braces — hatch *should* pick them
+# up automatically, but force-include guarantees it regardless of default
+# file-pattern heuristics. Each entry is also included in the regular
+# package layout, so the wheel ships exactly one copy per file (verified
+# via `python -m zipfile -l dist/*.whl`).
 "srg_mcp/serve/oauth/consent.html" = "srg_mcp/serve/oauth/consent.html"
+"srg_mcp/serve/static/icon.png" = "srg_mcp/serve/static/icon.png"
+"srg_mcp/serve/static/icon-32.png" = "srg_mcp/serve/static/icon-32.png"
+"srg_mcp/serve/static/icon-192.png" = "srg_mcp/serve/static/icon-192.png"
+"srg_mcp/serve/static/icon-512.png" = "srg_mcp/serve/static/icon-512.png"
+"srg_mcp/serve/static/favicon.ico" = "srg_mcp/serve/static/favicon.ico"
 
 [project.scripts]
 srgplus-mcp = "srg_mcp.server:main"
