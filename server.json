@@ -1,0 +1,59 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.srgplus/srgplus-mcp",
+  "title": "SRG+",
+  "description": "Manage SRG+ hubs, channels, content, assets, users, and workspaces from any MCP-aware AI agent.",
+  "websiteUrl": "https://srgplus.com",
+  "repository": {
+    "url": "https://github.com/srgplus/srgplus-mcp",
+    "source": "github"
+  },
+  "version": "0.4.4",
+  "icons": [
+    {
+      "src": "https://mcp.srgplus.com/static/icon-192.png",
+      "sizes": ["192x192"],
+      "mimeType": "image/png"
+    },
+    {
+      "src": "https://mcp.srgplus.com/static/icon-512.png",
+      "sizes": ["512x512"],
+      "mimeType": "image/png"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "srgplus-mcp",
+      "version": "0.4.4",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SRG_API_KEY",
+          "description": "SRG+ workspace API key (Settings -> Workspaces -> API Keys). Format: srgplus_...",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.srgplus.com/mcp",
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "description": "SRG+ workspace API key (Settings -> Workspaces -> API Keys). Format: srgplus_...",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
