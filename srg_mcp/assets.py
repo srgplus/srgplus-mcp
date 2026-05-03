@@ -1,9 +1,17 @@
 import srg
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from mcp.types import ToolAnnotations
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='List assets',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def list_assets(
     hub_profile_id: str,
     page_size: int = 50,
@@ -33,7 +41,14 @@ def list_assets(
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Search assets',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def search_assets(
     hub_profile_id: str,
     search: str,
@@ -57,13 +72,27 @@ def search_assets(
     return [item.model_dump(mode="json") for item in items]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get asset',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_asset(asset_id: str) -> dict:
     """Get full asset details by ID (Media, File, Image, Embed, or Video)."""
     return get_client().assets.get(asset_id).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update asset',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_asset(
     asset_id: str,
     name: str,
@@ -80,7 +109,14 @@ def update_asset(
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create embed asset',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_embed_asset(
     hub_profile_id: str,
     name: str,
@@ -100,7 +136,14 @@ def create_embed_asset(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create media asset',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_media_asset(
     hub_profile_id: str,
     name: str,
@@ -123,7 +166,14 @@ def create_media_asset(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create file asset',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_file_asset(
     hub_profile_id: str,
     name: str,
@@ -147,7 +197,14 @@ def create_file_asset(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create image asset',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_image_asset(
     hub_profile_id: str,
     name: str,
@@ -175,7 +232,14 @@ def create_image_asset(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create video asset',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_video_asset(
     hub_profile_id: str,
     name: str,

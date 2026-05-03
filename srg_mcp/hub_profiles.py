@@ -1,32 +1,68 @@
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from mcp.types import ToolAnnotations
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='List hub profiles',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def list_hub_profiles() -> list[dict]:
     """List all hub profiles in the workspace."""
     return [p.model_dump(mode="json") for p in get_client().hub_profiles.list()]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='List managed hub profiles',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def list_managed_hub_profiles() -> list[dict]:
     """List hub profiles where the current API key user has Admin or Editor role."""
     return [p.model_dump(mode="json") for p in get_client().hub_profiles.list_managed()]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get hub profile',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_hub_profile(hub_profile_id: str) -> dict:
     """Get full hub profile details by ID."""
     return get_client().hub_profiles.get(hub_profile_id).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get hub profile by username',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_hub_profile_by_username(username: str) -> dict:
     """Get hub profile details by its URL username/slug."""
     return get_client().hub_profiles.get_by_username(username).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Filter hub profiles',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def filter_hub_profiles(
     ids: list[str],
     availability_level: str | None = None,
@@ -44,7 +80,14 @@ def filter_hub_profiles(
     ]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create hub profile',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_hub_profile(
     name: str,
     user_name: str,
@@ -95,7 +138,14 @@ def create_hub_profile(
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update hub profile',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_hub_profile(
     hub_profile_id: str,
     name: str,
@@ -146,32 +196,67 @@ def update_hub_profile(
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Archive hub profile',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def archive_hub_profile(hub_profile_id: str) -> dict | None:
     """Archive a hub profile (hidden from listings, content preserved)."""
     return get_client().hub_profiles.archive(hub_profile_id)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Restore hub profile',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def restore_hub_profile(hub_profile_id: str) -> dict | None:
     """Restore a previously archived hub profile."""
     return get_client().hub_profiles.restore(hub_profile_id)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete hub profile',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_hub_profile(hub_profile_id: str) -> str:
     """Permanently delete a hub profile and all its data. Irreversible."""
     get_client().hub_profiles.delete(hub_profile_id)
     return "deleted"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Join hub profile',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def join_hub_profile(hub_profile_id: str) -> dict | None:
     """Join a public hub profile as the current API key user."""
     return get_client().hub_profiles.join(hub_profile_id)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Move hub profile to workspace',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def move_hub_profile_to_workspace(
     hub_profile_id: str, workspace_id: str
 ) -> dict | None:
@@ -179,7 +264,14 @@ def move_hub_profile_to_workspace(
     return get_client().hub_profiles.move_to_workspace(hub_profile_id, workspace_id)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Enable hub profile community',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def turn_on_hub_profile_community(hub_profile_id: str) -> dict | None:
     """Enable community features for a hub profile (posts, comments, reactions)."""
     return get_client().hub_profiles.turn_on_community(hub_profile_id)
