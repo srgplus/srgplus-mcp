@@ -80,6 +80,32 @@ Bearer srgplus_...` flows from above still work. OAuth tokens (RFC-shaped
 JWTs) are detected automatically when the bearer value doesn't start with
 `srgplus_`.
 
+### Multiple workspaces
+
+Each SRG+ workspace API key is scoped to a single workspace, so one OAuth
+session today connects one workspace.
+
+To connect Claude to **several workspaces at once**, add the SRG+ connector
+multiple times in claude.ai → Settings → Connectors. Each instance goes
+through its own OAuth flow with the API key for that workspace:
+
+```
+SRG+ (Acme)       → https://mcp.srgplus.com/mcp  → API key for Acme workspace
+SRG+ (Personal)   → https://mcp.srgplus.com/mcp  → API key for Personal workspace
+SRG+ (Studios)    → https://mcp.srgplus.com/mcp  → API key for Studios workspace
+```
+
+Tools from each connector show up in claude.ai under their connector name,
+so you can scope a request to a specific workspace by mentioning the
+connector ("use SRG+ Acme to find content X").
+
+A single-OAuth multi-workspace flow (Airtable-style: pick multiple
+workspaces in one consent screen, server provisions scoped keys
+automatically) is tracked in
+[SRGDEV-27](https://sergecreator.atlassian.net/browse/SRGDEV-27) and will
+land in a future release. Until then, the multi-connector approach above
+covers the same use case with no extra code.
+
 ### Production secrets
 
 In production, set these via GCP Secret Manager so token state survives
