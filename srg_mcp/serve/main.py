@@ -347,6 +347,8 @@ _ROOT_INDEX_HTML = """<!doctype html>
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icon-512.png">
   <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon.png">
   <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
   <meta property="og:title" content="SRG+ MCP">
   <meta property="og:description" content="MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware AI agent.">
   <meta property="og:image" content="https://mcp.srgplus.com/static/icon-512.png">
@@ -370,6 +372,62 @@ async def root_index(request: Request) -> Response:
         _ROOT_INDEX_HTML,
         media_type="text/html; charset=utf-8",
         headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+# Web App Manifest — the W3C-standard place for app icons. Chrome, Edge,
+# Safari, claude.ai's PWA layer, and many connector-directory crawlers
+# (Anthropic Console catalog, MCP Registry index, awesome-mcp scrapers)
+# read this file to resolve an app's name + icon set. Serving it at the
+# canonical filename and as ``/.well-known/`` covers both common probes.
+_MANIFEST = {
+    "name": "SRG+ MCP",
+    "short_name": "SRG+",
+    "description": (
+        "MCP server for SRG+ — manage hubs, channels, content, assets, "
+        "users, and workspaces from any MCP-aware AI agent."
+    ),
+    "id": "srgplus-mcp",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "icons": [
+        {
+            "src": "/static/icon-32.png",
+            "sizes": "32x32",
+            "type": "image/png",
+        },
+        {
+            "src": "/static/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable",
+        },
+        {
+            "src": "/static/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable",
+        },
+        {
+            "src": "/static/icon.png",
+            "sizes": "1024x1024",
+            "type": "image/png",
+            "purpose": "any",
+        },
+    ],
+}
+
+
+async def manifest(request: Request) -> Response:
+    return JSONResponse(
+        _MANIFEST,
+        headers={
+            "Content-Type": "application/manifest+json",
+            "Cache-Control": "public, max-age=3600",
+        },
     )
 
 
@@ -408,6 +466,10 @@ app = Starlette(
         ),
         Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
         Route("/static/{filename}", endpoint=static_asset, methods=["GET"]),
+        Route("/manifest.webmanifest", endpoint=manifest, methods=["GET"]),
+        # Some directories probe under .well-known/; serve the same manifest
+        # there so we hit both common conventions.
+        Route("/.well-known/manifest.json", endpoint=manifest, methods=["GET"]),
         *(
             Route(path, endpoint=_make_root_icon_handler(filename), methods=["GET"])
             for path, filename in _ROOT_ICON_ALIASES.items()

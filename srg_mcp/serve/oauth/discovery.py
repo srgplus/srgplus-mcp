@@ -62,9 +62,15 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
             # RFC 9207 — we include ``iss`` in every authorization response
             # so clients can detect AS mix-up attacks.
             "authorization_response_iss_parameter_supported": True,
-            # Branding (RFC 8414 §2 op_* extensions). Not strictly required
-            # but read by some MCP clients to render the connector card.
+            # Branding. RFC 8414 doesn't define a logo field, so we advertise
+            # the icon under both common conventions:
+            # - ``op_logo_uri`` — the ``op_*`` extension namespace from the
+            #   OpenID Connect Discovery family (read by some MCP clients).
+            # - ``logo_uri`` — the field name from RFC 7591 client metadata,
+            #   which Anthropic Console and other connector catalogs reuse
+            #   when scraping AS metadata for an icon.
             "op_logo_uri": _logo_uri(),
+            "logo_uri": _logo_uri(),
             "service_documentation": _DOCUMENTATION_URL,
         }
     )
@@ -86,7 +92,8 @@ async def protected_resource_metadata(request: Request) -> JSONResponse:
             "resource_documentation": _DOCUMENTATION_URL,
             # Branding — same logo URI advertised on the AS metadata so a
             # client that only fetches the protected-resource doc still has
-            # the icon URL.
+            # the icon URL. Both conventions exposed (see AS metadata above).
             "op_logo_uri": _logo_uri(),
+            "logo_uri": _logo_uri(),
         }
     )
