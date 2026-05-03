@@ -301,6 +301,78 @@ async def static_asset(request: Request) -> Response:
     return _static_response(request.path_params["filename"])
 
 
+# Root-level icon aliases.
+#
+# Connector UIs (claude.ai's "Custom connector" detail panel, OpenAI Apps SDK,
+# ChatGPT Connectors, the MCP Registry preview, awesome-mcp directory crawlers,
+# etc.) probe a handful of conventional paths to find a logo before falling
+# back to a generic placeholder. Browsers do the same for tab/share icons.
+#
+# We alias them to the matching ``serve/static/`` asset so every probe hits
+# the SRG+ mark instead of 404. Sizes:
+#   /apple-touch-icon.png             → 192x192 (iOS-friendly; iOS scales down)
+#   /apple-touch-icon-precomposed.png → 192x192 (legacy iOS, same file)
+#   /apple-icon.png                   → 192x192 (Android variant)
+#   /logo.png                         → 512x512 (PWA / connector cards)
+#   /icon.png                         → 1024x1024 (high-res default)
+_ROOT_ICON_ALIASES: dict[str, str] = {
+    "/apple-touch-icon.png": "icon-192.png",
+    "/apple-touch-icon-precomposed.png": "icon-192.png",
+    "/apple-icon.png": "icon-192.png",
+    "/logo.png": "icon-512.png",
+    "/icon.png": "icon.png",
+}
+
+
+def _make_root_icon_handler(filename: str):
+    async def handler(request: Request) -> Response:
+        return _static_response(filename)
+
+    handler.__name__ = f"icon_alias_{filename.replace('.', '_').replace('-', '_')}"
+    return handler
+
+
+# Minimal HTML index served at /. Some connector caches and link-preview crawlers
+# parse <link rel="icon"> / <meta property="og:image"> off the root page rather
+# than probing well-known paths, so we expose both. Keep this page small — it's
+# only there for branding metadata, not for human users (humans go to srgplus.com).
+_ROOT_INDEX_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SRG+ MCP</title>
+  <meta name="description" content="MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware AI agent.">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/static/icon-512.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/apple-touch-icon.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <meta property="og:title" content="SRG+ MCP">
+  <meta property="og:description" content="MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware AI agent.">
+  <meta property="og:image" content="https://mcp.srgplus.com/static/icon-512.png">
+  <meta property="og:url" content="https://mcp.srgplus.com/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:image" content="https://mcp.srgplus.com/static/icon-512.png">
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#222;">
+  <h1>SRG+ MCP</h1>
+  <p>Hosted MCP endpoint for the <a href="https://srgplus.com">SRG+</a> platform.</p>
+  <p>Connect any MCP-aware AI agent (Claude, Cursor, Cline, ChatGPT) to <code>https://mcp.srgplus.com/mcp</code>.</p>
+  <p>Source &amp; docs: <a href="https://github.com/srgplus/srgplus-mcp">github.com/srgplus/srgplus-mcp</a></p>
+</body>
+</html>
+"""
+
+
+async def root_index(request: Request) -> Response:
+    return Response(
+        _ROOT_INDEX_HTML,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
     async with _session_manager.run():
@@ -327,6 +399,7 @@ _CORS_EXPOSE_HEADERS = ["mcp-session-id", "www-authenticate"]
 
 app = Starlette(
     routes=[
+        Route("/", endpoint=root_index, methods=["GET"]),
         Route("/health", endpoint=health, methods=["GET"]),
         Route(
             "/mcp",
@@ -335,6 +408,10 @@ app = Starlette(
         ),
         Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
         Route("/static/{filename}", endpoint=static_asset, methods=["GET"]),
+        *(
+            Route(path, endpoint=_make_root_icon_handler(filename), methods=["GET"])
+            for path, filename in _ROOT_ICON_ALIASES.items()
+        ),
         *oauth.get_routes(),
     ],
     middleware=[
