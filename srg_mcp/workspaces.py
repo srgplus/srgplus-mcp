@@ -1,15 +1,30 @@
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from mcp.types import ToolAnnotations
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get workspace',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_workspace() -> dict:
     """Get full details of the current workspace (name, seats, subscription, hub profiles)."""
     client = get_client()
     return client.workspaces.get(client.workspace_id).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update workspace',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_workspace(name: str) -> dict:
     """Update the current workspace's display name."""
     client = get_client()
@@ -17,7 +32,14 @@ def update_workspace(name: str) -> dict:
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get workspace hub profiles',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_workspace_hub_profiles() -> list[dict]:
     """List all hub profiles in the current workspace (minimal representation)."""
     client = get_client()
@@ -30,7 +52,14 @@ def get_workspace_hub_profiles() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='List workspace actions',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def list_workspace_actions() -> list[dict]:
     """List all automation actions configured on the current workspace."""
     client = get_client()
@@ -38,7 +67,14 @@ def list_workspace_actions() -> list[dict]:
     return [a.model_dump(mode="json") for a in actions]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get workspace action',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_workspace_action(action_id: str) -> dict:
     """Get full details of a workspace automation action by ID."""
     client = get_client()
@@ -47,7 +83,14 @@ def get_workspace_action(action_id: str) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create workspace action',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_workspace_action(
     title: str,
     metadata: dict,
@@ -70,7 +113,14 @@ def create_workspace_action(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update workspace action',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_workspace_action(
     action_id: str,
     title: str,
@@ -93,7 +143,14 @@ def update_workspace_action(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete workspace action',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_workspace_action(action_id: str) -> str:
     """Permanently delete a workspace automation action."""
     client = get_client()

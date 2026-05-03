@@ -1,8 +1,16 @@
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from mcp.types import ToolAnnotations
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='List contents',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def list_contents(
     hub_profile_id: str,
     page_size: int = 50,
@@ -34,7 +42,14 @@ def list_contents(
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Search contents',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def search_contents(
     hub_profile_id: str,
     search: str,
@@ -60,7 +75,14 @@ def search_contents(
     return [item.model_dump(mode="json") for item in items]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get content',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_content(content_id: str, hub_profile_id: str | None = None) -> dict:
     """Get content item details by ID (v1 schema).
 
@@ -73,7 +95,14 @@ def get_content(content_id: str, hub_profile_id: str | None = None) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get content (v2)',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_content_v2(content_id: str) -> dict:
     """Get content item by ID (v2 schema).
 
@@ -82,7 +111,14 @@ def get_content_v2(content_id: str) -> dict:
     return get_client().contents.get_v2(content_id).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create content',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_content(
     name: str,
     hub_profile_id: str,
@@ -120,7 +156,14 @@ def create_content(
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update content',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_content(
     content_id: str,
     name: str | None = None,
@@ -161,7 +204,14 @@ def update_content(
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Add content to categories',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def add_content_to_categories(
     content_id: str,
     channel_id: str,
@@ -184,7 +234,14 @@ def add_content_to_categories(
     return "added"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Remove content from categories',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def remove_content_from_categories(
     content_id: str,
     channel_id: str,
@@ -209,7 +266,14 @@ def remove_content_from_categories(
     return "removed"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Move content',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def move_content(
     content_id: str,
     channel_id: str,
@@ -237,7 +301,14 @@ def move_content(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create content section',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_content_section(
     content_id: str, category_name: str, name: str
 ) -> dict | None:
@@ -248,7 +319,14 @@ def create_content_section(
     return get_client().contents.create_section(content_id, category_name, name=name)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update content section',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_content_section(
     content_id: str,
     category_name: str,
@@ -261,7 +339,14 @@ def update_content_section(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete content section',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_content_section(
     content_id: str,
     category_name: str,
@@ -302,7 +387,14 @@ def delete_content_section(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Add subcontent',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def add_subcontent(
     content_id: str,
     category_name: str,
@@ -334,7 +426,14 @@ def add_subcontent(
     return "added"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get subcontent',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_subcontent(
     content_id: str,
     category_name: str,
@@ -372,7 +471,14 @@ def get_subcontent(
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete subcontent',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_subcontent(
     content_id: str,
     category_name: str,
@@ -398,7 +504,14 @@ def delete_subcontent(
     return "deleted"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Move subcontent',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def move_subcontent(
     content_id: str,
     category_name: str,
@@ -437,7 +550,14 @@ def move_subcontent(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update content progression',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def patch_content_progression(content_id: str, status: str) -> dict:
     """Update the current user's progression status for a content item.
 
@@ -450,7 +570,14 @@ def patch_content_progression(content_id: str, status: str) -> dict:
     return result.model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update media progression',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def patch_media_progression(media_id: str, last_watched_time: int) -> dict | None:
     """Update the current user's last watched position in a media asset (seconds).
 
@@ -461,7 +588,14 @@ def patch_media_progression(media_id: str, last_watched_time: int) -> dict | Non
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get progression stats',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_progression_stats(collection_id: str | None = None) -> dict:
     """Get completion statistics for the current user.
 

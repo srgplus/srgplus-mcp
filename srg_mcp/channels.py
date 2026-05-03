@@ -1,8 +1,16 @@
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from mcp.types import ToolAnnotations
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='List channels',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def list_channels(hub_profile_id: str, include_archived: bool = False) -> list[dict]:
     """List all channels for a hub profile."""
     return [
@@ -13,13 +21,27 @@ def list_channels(hub_profile_id: str, include_archived: bool = False) -> list[d
     ]
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get channel',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_channel(channel_id: str) -> dict:
     """Get full channel details by ID (includes categories and heading content)."""
     return get_client().channels.get(channel_id).model_dump(mode="json")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get channel by name',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_channel_by_name(hub_profile_username: str, channel_name: str) -> dict:
     """Get channel details by hub profile username slug and channel name slug."""
     return (
@@ -29,7 +51,14 @@ def get_channel_by_name(hub_profile_username: str, channel_name: str) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create channel',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_channel(
     name: str,
     hub_profile_id: str,
@@ -46,7 +75,14 @@ def create_channel(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update channel',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_channel(
     channel_id: str,
     hub_profile_id: str,
@@ -75,13 +111,27 @@ def update_channel(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Archive channel',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def archive_channel(channel_id: str) -> dict | None:
     """Archive a channel (hidden from members, content preserved)."""
     return get_client().channels.archive(channel_id)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete channel',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_channel(channel_id: str) -> str:
     """Permanently delete a channel and all its categories/sections. Irreversible."""
     get_client().channels.delete(channel_id)
@@ -93,7 +143,14 @@ def delete_channel(channel_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create category',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_category(
     channel_id: str,
     name: str,
@@ -151,7 +208,14 @@ def create_category(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update category',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_category(
     channel_id: str,
     category_id: str,
@@ -193,20 +257,41 @@ def update_category(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Archive category',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def archive_category(channel_id: str, category_id: str) -> dict | None:
     """Archive a category inside a channel."""
     return get_client().channels.archive_category(channel_id, category_id)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete category',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_category(channel_id: str, category_id: str) -> str:
     """Permanently delete a category from a channel. Irreversible."""
     get_client().channels.delete_category(channel_id, category_id)
     return "deleted"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get category references',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_category_references(
     channel_id: str,
     category_id: str,
@@ -229,7 +314,14 @@ def get_category_references(
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Get category by slugs',
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def get_category_by_slugs(
     hub_profile_username: str,
     channel_name: str,
@@ -248,13 +340,27 @@ def get_category_by_slugs(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Create section',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def create_section(channel_id: str, category_id: str, name: str) -> str:
     """Create a new section inside a channel category. Returns the new section ID."""
     return get_client().channels.create_section(channel_id, category_id, name=name)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Update section',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def update_section(
     channel_id: str,
     category_id: str,
@@ -267,7 +373,14 @@ def update_section(
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Delete section',
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
 def delete_section(channel_id: str, category_id: str, section_id: str) -> str:
     """Permanently delete a section from a channel category. Irreversible."""
     get_client().channels.delete_section(channel_id, category_id, section_id)
@@ -279,7 +392,14 @@ def delete_section(channel_id: str, category_id: str, section_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title='Add content to category',
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
 def add_content_to_category(
     channel_id: str,
     category_id: str,
