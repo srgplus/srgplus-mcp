@@ -1,5 +1,9 @@
 # srgplus-mcp
 
+<!-- MCP Registry ownership proof — required by mcp-publisher for the
+     io.github.srgplus/* namespace. Do not remove. -->
+mcp-name: io.github.srgplus/srgplus-mcp
+
 MCP server for [SRG+](https://srgplus.com) — lets Claude (and any MCP-aware
 agent) manage hubs, channels, content, assets, users, and workspaces through
 the SRG+ API.
