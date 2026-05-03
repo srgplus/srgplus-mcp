@@ -8,3 +8,4 @@ dist/
 .idea/
 PLAN.md
 uv.lock
+.DS_Store
