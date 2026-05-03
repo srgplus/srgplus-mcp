@@ -27,6 +27,18 @@ def _resource_uri() -> str:
     return os.environ.get("OAUTH_RESOURCE", _issuer() + "/mcp")
 
 
+# Branding assets advertised in discovery so MCP clients (claude.ai web,
+# Cursor, etc.) can render the SRG+ mark next to the connector instead of a
+# default globe. The 512px PNG is the highest-quality variant we ship — it
+# scales down crisply for cards/avatars and stays tiny on the wire (~125 KB).
+_LOGO_FILENAME = "icon-512.png"
+_DOCUMENTATION_URL = "https://github.com/srgplus/srgplus-mcp"
+
+
+def _logo_uri() -> str:
+    return f"{_issuer()}/static/{_LOGO_FILENAME}"
+
+
 async def authorization_server_metadata(request: Request) -> JSONResponse:
     """RFC 8414 — Authorization Server Metadata.
 
@@ -50,6 +62,10 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
             # RFC 9207 — we include ``iss`` in every authorization response
             # so clients can detect AS mix-up attacks.
             "authorization_response_iss_parameter_supported": True,
+            # Branding (RFC 8414 §2 op_* extensions). Not strictly required
+            # but read by some MCP clients to render the connector card.
+            "op_logo_uri": _logo_uri(),
+            "service_documentation": _DOCUMENTATION_URL,
         }
     )
 
@@ -67,6 +83,10 @@ async def protected_resource_metadata(request: Request) -> JSONResponse:
             "authorization_servers": [issuer],
             "scopes_supported": ["mcp:full"],
             "bearer_methods_supported": ["header"],
-            "resource_documentation": "https://github.com/srgplus/srgplus-mcp",
+            "resource_documentation": _DOCUMENTATION_URL,
+            # Branding — same logo URI advertised on the AS metadata so a
+            # client that only fetches the protected-resource doc still has
+            # the icon URL.
+            "op_logo_uri": _logo_uri(),
         }
     )
