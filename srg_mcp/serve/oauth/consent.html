@@ -90,7 +90,8 @@
       color: var(--muted);
       margin: 12px 0 6px;
     }
-    input[type="password"] {
+    input[type="password"],
+    textarea.api-key-input {
       width: 100%;
       padding: 12px 14px;
       background: var(--input-bg);
@@ -101,8 +102,11 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       outline: none;
       transition: border-color 0.15s;
+      box-sizing: border-box;
+      resize: vertical;
     }
-    input[type="password"]:focus {
+    input[type="password"]:focus,
+    textarea.api-key-input:focus {
       border-color: var(--accent);
     }
     .error {
@@ -181,22 +185,23 @@
         <input type="hidden" name="state" value="{{ state }}">
         <input type="hidden" name="scope" value="{{ scope }}">
 
-        <label for="api_key">SRG+ Workspace API Key</label>
-        <input
-          type="password"
+        <label for="api_key">SRG+ API Key(s)</label>
+        <textarea
+          class="api-key-input"
           id="api_key"
           name="api_key"
-          placeholder="srgplus_..."
+          rows="3"
+          placeholder="srgplus_...&#10;srgplus_... (one per line, or comma-separated)"
           autofocus
           spellcheck="false"
           autocomplete="off"
-          required>
+          required></textarea>
 
         <button type="submit">Authorize</button>
       </form>
 
       <div class="help">
-        Don't have an API key?
+        Enter one key per workspace. Don't have a key?
         <a href="https://srgplus.com" target="_blank" rel="noopener noreferrer">
           Get one at SRG+ Settings → API Keys
         </a>

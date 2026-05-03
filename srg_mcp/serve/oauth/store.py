@@ -10,6 +10,7 @@ instance replay is a known limitation that needs Redis to fix properly. Worst
 case is a replay window equal to the JWT TTL (10 min for codes, 1 hour for
 access tokens). Tracked as a follow-up.
 """
+
 from __future__ import annotations
 
 import base64
@@ -37,8 +38,12 @@ _TOKEN_DENY_TTL = 30 * 24 * 3600
 _TOKEN_DENY_MAX = 100_000
 
 
-code_deny_list: TTLCache[str, bool] = TTLCache(maxsize=_CODE_DENY_MAX, ttl=_CODE_DENY_TTL)
-token_deny_list: TTLCache[str, bool] = TTLCache(maxsize=_TOKEN_DENY_MAX, ttl=_TOKEN_DENY_TTL)
+code_deny_list: TTLCache[str, bool] = TTLCache(
+    maxsize=_CODE_DENY_MAX, ttl=_CODE_DENY_TTL
+)
+token_deny_list: TTLCache[str, bool] = TTLCache(
+    maxsize=_TOKEN_DENY_MAX, ttl=_TOKEN_DENY_TTL
+)
 
 
 # ---------- CSRF (stateless, HMAC-signed) --------------------------------

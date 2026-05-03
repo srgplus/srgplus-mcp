@@ -18,6 +18,7 @@ All JWTs we issue carry standard claims:
 We deliberately re-encrypt the api_key on every token mint so that an attacker
 who somehow leaks one nonce doesn't get to decrypt every future token.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -52,7 +53,7 @@ from .store import is_code_used, is_token_revoked, mark_code_used, revoke_token
 logger = logging.getLogger("srgplus-mcp-serve.oauth")
 
 
-_ACCESS_TTL = 3600           # 1h
+_ACCESS_TTL = 3600  # 1h
 _REFRESH_TTL = 30 * 24 * 3600  # 30d
 
 
@@ -137,7 +138,9 @@ async def token(request: Request) -> Response:
             raise UnsupportedGrantType()
     except OAuthError as e:
         logger.info("oauth.token.error error=%s status=%d", e.code, e.status)
-        return JSONResponse(e.to_dict(), status_code=e.status, headers={"Cache-Control": "no-store"})
+        return JSONResponse(
+            e.to_dict(), status_code=e.status, headers={"Cache-Control": "no-store"}
+        )
 
 
 def _handle_code_grant(form) -> Response:
@@ -194,7 +197,9 @@ def _handle_code_grant(form) -> Response:
         raise InvalidGrant("Authorization code is invalid or expired.") from e
 
     pair = _mint_pair(api_key, scope=code_payload.get("scope") or "mcp:full")
-    return JSONResponse(pair, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+    return JSONResponse(
+        pair, headers={"Cache-Control": "no-store", "Pragma": "no-cache"}
+    )
 
 
 def _handle_refresh_grant(form) -> Response:
@@ -240,7 +245,9 @@ def _handle_refresh_grant(form) -> Response:
         raise InvalidGrant("Refresh token is invalid or expired.") from e
 
     pair = _mint_pair(api_key, scope=payload.get("scope") or "mcp:full")
-    return JSONResponse(pair, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+    return JSONResponse(
+        pair, headers={"Cache-Control": "no-store", "Pragma": "no-cache"}
+    )
 
 
 # ---------- /oauth/revoke -------------------------------------------------

@@ -40,6 +40,7 @@ Connect from claude.ai web (OAuth auto-discovery):
 
     Settings → Connectors → Add custom connector → URL: https://mcp.srgplus.com/mcp
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -58,17 +59,12 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-# Multi-tenant client strategy: the SDK's ``SRGClient`` bakes ``workspace_id``
-# into its ``hub_profiles`` / ``workspaces`` resources via
-# ``@cached_property`` — so a single shared client cannot serve two
-# workspaces correctly (the first key's workspace_id gets cached and every
-# subsequent key inherits it, producing requests like
-# ``/api/v1/workspaces/None/hub-profiles`` → 401).
-#
-# Instead, ``srg_mcp._client.get_client()`` returns a per-api_key
-# ``SRGClient`` from an LRU cache. Each request binds its api_key into
-# ``_current_key_var`` here in ``main`` (after Bearer/JWT validation) and
-# the tools' ``get_client()`` calls resolve to the right tenant.
+# Multi-tenant client strategy: each request carries its own api_key(s) —
+# either a raw key in X-API-Key / Bearer, or a comma-separated string
+# extracted from an OAuth JWT. ``srg_mcp._client.get_client()`` returns a
+# per-key-set ``SRGClient`` (cached by the comma-joined string). Every tool
+# call passes ``workspace_id`` explicitly, so a single client can serve
+# multiple workspaces without any shared state issues.
 import srg_mcp._client as _srg_mcp_client  # noqa: E402
 
 # Strip any ambient SRG_API_KEY from the env so the per-request lookup never
@@ -150,7 +146,9 @@ def _www_authenticate_header() -> tuple[bytes, bytes]:
     return (b"www-authenticate", value.encode())
 
 
-async def _send_json(send, status: int, body: dict, *, extra_headers: list | None = None) -> None:
+async def _send_json(
+    send, status: int, body: dict, *, extra_headers: list | None = None
+) -> None:
     payload = json.dumps(body).encode()
     headers = [
         (b"content-type", b"application/json"),
@@ -224,14 +222,18 @@ class _MCPEndpoint:
         # Lightweight observability: how the key was acquired + non-leaking
         # prefix. Useful when triaging "tool returns 401" reports.
         auth_path = (
-            "x-api-key" if x_api_key
-            else "bearer-raw" if (bearer and bearer.startswith("srgplus_"))
+            "x-api-key"
+            if x_api_key
+            else "bearer-raw"
+            if (bearer and bearer.startswith("srgplus_"))
             else "bearer-jwt"
         )
         prefix = api_key[:12] + "..." if len(api_key) > 12 else api_key
         logger.info(
             "mcp.auth path=%s api_key_prefix=%s api_key_len=%d",
-            auth_path, prefix, len(api_key),
+            auth_path,
+            prefix,
+            len(api_key),
         )
 
         token = _srg_mcp_client.set_current_api_key(api_key)

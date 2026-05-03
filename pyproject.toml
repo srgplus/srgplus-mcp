@@ -26,7 +26,7 @@ dependencies = [
     # private `mcp._mcp_server` attribute in serve/main.py, which any major
     # version bump could break without warning.
     "mcp[cli]>=1.0,<2.0",
-    "srgplus>=0.2.0",
+    "srgplus>=0.2.1",
 ]
 
 [project.optional-dependencies]

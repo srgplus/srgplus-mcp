@@ -4,6 +4,7 @@ Errors follow RFC 6749 §5.2 — JSON body with ``error`` and optional
 ``error_description``. We never include the exact reason a credential failed
 (timing-safe + uniform messages); see the security checklist.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -44,7 +45,9 @@ class OAuthError(Exception):
 class InvalidRequest(OAuthError):
     code = "invalid_request"
     status = 400
-    description = "The request is missing a required parameter or is otherwise malformed."
+    description = (
+        "The request is missing a required parameter or is otherwise malformed."
+    )
 
 
 class InvalidClient(OAuthError):

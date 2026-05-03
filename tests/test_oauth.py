@@ -18,6 +18,7 @@ Coverage:
   rejects revoked OAuth tokens; emits WWW-Authenticate on 401
 * CORS preflight from ``https://claude.ai``
 """
+
 from __future__ import annotations
 
 import base64
@@ -32,9 +33,15 @@ import respx
 # OAuth env defaults are set in conftest.py BEFORE the app is imported.
 # Re-stating them here is harmless — ``setdefault`` is idempotent.
 os.environ.setdefault("OAUTH_ISSUER", "http://localhost:8090")
-os.environ.setdefault("OAUTH_CLIENT_REGISTRATION_KEY", "test-client-reg-key-for-pytest-only-please")
-os.environ.setdefault("OAUTH_TOKEN_SIGNING_KEY", "test-token-signing-key-for-pytest-only-please")
-os.environ.setdefault("OAUTH_API_KEY_ENCRYPTION_KEY", base64.urlsafe_b64encode(b"x" * 32).decode())
+os.environ.setdefault(
+    "OAUTH_CLIENT_REGISTRATION_KEY", "test-client-reg-key-for-pytest-only-please"
+)
+os.environ.setdefault(
+    "OAUTH_TOKEN_SIGNING_KEY", "test-token-signing-key-for-pytest-only-please"
+)
+os.environ.setdefault(
+    "OAUTH_API_KEY_ENCRYPTION_KEY", base64.urlsafe_b64encode(b"x" * 32).decode()
+)
 
 from srg_mcp.serve.oauth import store as store_module  # noqa: E402
 
@@ -99,7 +106,9 @@ async def _register(c: httpx.AsyncClient) -> str:
     return r.json()["client_id"]
 
 
-async def _full_authorize_flow(c: httpx.AsyncClient, *, verifier: str) -> tuple[str, str]:
+async def _full_authorize_flow(
+    c: httpx.AsyncClient, *, verifier: str
+) -> tuple[str, str]:
     """Run register → /authorize GET → /authorize POST and return (client_id, code)."""
     client_id = await _register(c)
     challenge = _s256(verifier)
@@ -129,7 +138,9 @@ async def _full_authorize_flow(c: httpx.AsyncClient, *, verifier: str) -> tuple[
             "api_key": "srgplus_validkey",
         },
     )
-    assert r.status_code == 302, f"authorize_flow expected 302, got {r.status_code}: {r.text[:200]}"
+    assert r.status_code == 302, (
+        f"authorize_flow expected 302, got {r.status_code}: {r.text[:200]}"
+    )
     from urllib.parse import parse_qs, urlparse
 
     code = parse_qs(urlparse(r.headers["location"]).query)["code"][0]

@@ -5,6 +5,7 @@ Both endpoints are unauthenticated (per spec) and return JSON metadata.
 ``https://mcp.srgplus.com``) so we can run on localhost in dev/tests without
 hardcoding the prod URL.
 """
+
 from __future__ import annotations
 
 import os

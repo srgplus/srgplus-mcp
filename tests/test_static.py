@@ -11,6 +11,7 @@ advertise the 512px logo URL in OAuth discovery. These tests cover:
 The ``client`` and ``_lifespan`` fixtures live in ``conftest.py`` — shared
 with ``test_oauth.py`` so the MCP session manager only runs once.
 """
+
 from __future__ import annotations
 
 import pytest

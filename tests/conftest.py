@@ -11,6 +11,7 @@ Hoisting the lifespan + client fixtures into ``conftest.py`` gives every
 module a single shared instance — the manager is started once for the
 entire pytest run and torn down at the end.
 """
+
 from __future__ import annotations
 
 import asyncio
