@@ -672,6 +672,40 @@ async def test_mcp_unauthenticated_includes_www_authenticate(client):
 
 
 @pytest.mark.asyncio
+async def test_mcp_unauthenticated_tools_list_for_descriptor_scan(client):
+    r = await client.post(
+        "/mcp",
+        headers={
+            "content-type": "application/json",
+            "accept": "application/json, text/event-stream",
+        },
+        content='{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}',
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "result" in body
+    assert "tools" in body["result"]
+    assert len(body["result"]["tools"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_mcp_unauthenticated_tool_call_still_requires_auth(client):
+    r = await client.post(
+        "/mcp",
+        headers={
+            "content-type": "application/json",
+            "accept": "application/json, text/event-stream",
+        },
+        content=(
+            '{"jsonrpc":"2.0","id":1,"method":"tools/call",'
+            '"params":{"name":"list_workspaces","arguments":{}}}'
+        ),
+    )
+    assert r.status_code == 401
+    assert r.json()["error"] == "missing_api_key"
+
+
+@pytest.mark.asyncio
 async def test_mcp_x_api_key_backward_compat(client):
     """Header path: tools/list should succeed against the SDK, even with a
     fake key (the SDK only calls the network on actual tool invocation)."""
