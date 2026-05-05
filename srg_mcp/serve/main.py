@@ -369,6 +369,31 @@ async def static_asset(request: Request) -> Response:
     return _static_response(request.path_params["filename"])
 
 
+# OpenAI Apps SDK domain verification challenge.
+#
+# When an app is registered at platform.openai.com/apps-manage, OpenAI issues
+# a per-domain token and verifies ownership by GETting:
+#
+#     https://<host>/.well-known/openai-apps-challenge
+#
+# expecting the response body to be exactly the token (plain text, 200 OK).
+# We pull the token from ``OPENAI_APPS_CHALLENGE_TOKEN`` so it can be rotated
+# via Cloud Run env vars / Secret Manager without a code change.
+#
+# If the env var is unset (e.g. local dev or before issuance) we 404 — that
+# matches "not configured" rather than echoing an empty body, which would
+# accidentally pass verification with a blank token.
+async def openai_apps_challenge(request: Request) -> Response:
+    token = (os.environ.get("OPENAI_APPS_CHALLENGE_TOKEN") or "").strip()
+    if not token:
+        return Response("not_configured", status_code=404, media_type="text/plain")
+    return Response(
+        token,
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # Root-level icon aliases.
 #
 # Connector UIs (claude.ai's "Custom connector" detail panel, OpenAI Apps SDK,
@@ -540,6 +565,11 @@ app = Starlette(
         Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
         Route("/static/{filename}", endpoint=static_asset, methods=["GET"]),
         Route("/manifest.webmanifest", endpoint=manifest, methods=["GET"]),
+        Route(
+            "/.well-known/openai-apps-challenge",
+            endpoint=openai_apps_challenge,
+            methods=["GET"],
+        ),
         # Some directories probe under .well-known/; serve the same manifest
         # there so we hit both common conventions.
         Route("/.well-known/manifest.json", endpoint=manifest, methods=["GET"]),
