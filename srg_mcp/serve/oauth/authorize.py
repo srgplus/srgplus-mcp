@@ -158,7 +158,7 @@ def _render_consent(
         else ""
     )
     form_action = f"'self' {redirect_origin}".strip()
-    csp = f"default-src 'self'; style-src 'unsafe-inline'; form-action {form_action}"
+    csp = f"default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action {form_action}"
     # Defensive headers: never let consent pages get cached or framed.
     return HTMLResponse(
         html,

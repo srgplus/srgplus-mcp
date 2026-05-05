@@ -153,6 +153,49 @@
       color: var(--muted);
     }
     .scope strong { color: var(--text); }
+    .key-fields { display: flex; flex-direction: column; gap: 8px; }
+    .key-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .key-row input[type="password"] {
+      flex: 1;
+      margin: 0;
+    }
+    .btn-remove {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-remove:hover { border-color: var(--error); color: var(--error); background: transparent; }
+    .btn-add {
+      margin-top: 4px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      width: 100%;
+    }
+    .btn-add:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
   </style>
 </head>
 <body>
@@ -185,27 +228,79 @@
         <input type="hidden" name="state" value="{{ state }}">
         <input type="hidden" name="scope" value="{{ scope }}">
 
-        <label for="api_key">SRG+ API Key(s)</label>
-        <textarea
-          class="api-key-input"
-          id="api_key"
-          name="api_key"
-          rows="3"
-          placeholder="srgplus_...&#10;srgplus_... (one per line, or comma-separated)"
-          autofocus
-          spellcheck="false"
-          autocomplete="off"
-          required></textarea>
+        <input type="hidden" id="api_key" name="api_key">
+
+        <label>SRG+ API Key</label>
+        <div class="key-fields" id="key-fields">
+          <div class="key-row">
+            <input
+              type="password"
+              placeholder="srgplus_..."
+              autofocus
+              spellcheck="false"
+              autocomplete="off"
+              class="key-input"
+            >
+          </div>
+        </div>
+        <button type="button" class="btn-add" id="btn-add">+ Add another workspace</button>
 
         <button type="submit">Authorize</button>
       </form>
 
       <div class="help">
-        Enter one key per workspace. Don't have a key?
+        One key per workspace. Don't have a key?
         <a href="https://srgplus.com" target="_blank" rel="noopener noreferrer">
           Get one at SRG+ Settings → API Keys
         </a>
       </div>
+
+      <script>
+        const fields = document.getElementById('key-fields');
+        const hidden = document.getElementById('api_key');
+        const form = hidden.closest('form');
+
+        function makeRow(first) {
+          const row = document.createElement('div');
+          row.className = 'key-row';
+
+          const inp = document.createElement('input');
+          inp.type = 'password';
+          inp.placeholder = 'srgplus_...';
+          inp.spellcheck = false;
+          inp.autocomplete = 'off';
+          inp.className = 'key-input';
+          row.appendChild(inp);
+
+          if (!first) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn-remove';
+            btn.textContent = '×';
+            btn.title = 'Remove';
+            btn.addEventListener('click', () => row.remove());
+            row.appendChild(btn);
+          }
+          return row;
+        }
+
+        document.getElementById('btn-add').addEventListener('click', () => {
+          fields.appendChild(makeRow(false));
+          fields.lastElementChild.querySelector('input').focus();
+        });
+
+        form.addEventListener('submit', (e) => {
+          const keys = [...document.querySelectorAll('.key-input')]
+            .map(i => i.value.trim())
+            .filter(Boolean);
+          if (!keys.length) {
+            e.preventDefault();
+            document.querySelectorAll('.key-input')[0].focus();
+            return;
+          }
+          hidden.value = keys.join('\n');
+        });
+      </script>
     </main>
   </div>
 </body>

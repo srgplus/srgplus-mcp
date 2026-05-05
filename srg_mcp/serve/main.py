@@ -50,6 +50,10 @@ import os
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import uvicorn
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
@@ -229,7 +233,7 @@ class _MCPEndpoint:
             else "bearer-jwt"
         )
         prefix = api_key[:12] + "..." if len(api_key) > 12 else api_key
-        logger.info(
+        logger.debug(
             "mcp.auth path=%s api_key_prefix=%s api_key_len=%d",
             auth_path,
             prefix,
@@ -466,6 +470,11 @@ app = Starlette(
             endpoint=mcp_endpoint,
             methods=["GET", "POST", "DELETE"],
         ),
+        Route(
+            "/connect",
+            endpoint=mcp_endpoint,
+            methods=["GET", "POST", "DELETE"],
+        ),
         Route("/favicon.ico", endpoint=favicon, methods=["GET"]),
         Route("/static/{filename}", endpoint=static_asset, methods=["GET"]),
         Route("/manifest.webmanifest", endpoint=manifest, methods=["GET"]),
@@ -498,6 +507,8 @@ def run() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    logging.getLogger("mcp.server.streamable_http").setLevel(logging.WARNING)
+    logging.getLogger("mcp.server.lowlevel.server").setLevel(logging.WARNING)
     logger.info("srgplus-mcp-serve listening on %s:%s", host, port)
     uvicorn.run(app, host=host, port=port, log_level="info")
 
