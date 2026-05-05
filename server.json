@@ -8,7 +8,7 @@
     "url": "https://github.com/srgplus/srgplus-mcp",
     "source": "github"
   },
-  "version": "0.4.5",
+  "version": "0.4.7",
   "icons": [
     {
       "src": "https://mcp.srgplus.com/static/icon-192.png",
@@ -25,15 +25,15 @@
     {
       "registryType": "pypi",
       "identifier": "srgplus-mcp",
-      "version": "0.4.5",
+      "version": "0.4.7",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "name": "SRG_API_KEY",
-          "description": "SRG+ workspace API key (Settings -> Workspaces -> API Keys). Format: srgplus_...",
+          "name": "SRG_API_KEYS",
+          "description": "SRG+ workspace API key(s). Single key: srgplus_xxx. Multiple workspaces: srgplus_xxx,srgplus_yyy (comma-separated). Get keys from Settings -> Workspaces -> API Keys.",
           "isRequired": true,
           "format": "string",
           "isSecret": true
@@ -48,7 +48,7 @@
       "headers": [
         {
           "name": "X-API-Key",
-          "description": "SRG+ workspace API key (Settings -> Workspaces -> API Keys). Format: srgplus_...",
+          "description": "SRG+ workspace API key(s). Single: srgplus_xxx. Multiple workspaces: srgplus_xxx,srgplus_yyy (comma-separated). Or use the OAuth flow (recommended for browser-based clients) and the multi-key consent page handles this automatically.",
           "isRequired": true,
           "format": "string",
           "isSecret": true
