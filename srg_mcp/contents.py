@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='List contents',
+        title="List contents",
         readOnlyHint=True,
         destructiveHint=False,
         openWorldHint=True,
@@ -13,6 +13,7 @@ from mcp.types import ToolAnnotations
 )
 def list_contents(
     hub_profile_id: str,
+    workspace_id: str,
     page_size: int = 50,
     cursor: str | None = None,
     only_archived: bool = False,
@@ -23,6 +24,7 @@ def list_contents(
 ) -> dict:
     """List content items in a hub profile with cursor-based pagination.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     types: ["Content"], ["Collection"], or None for both (default)
     Returns {"items": [...], "cursor": "..." | null}
     """
@@ -35,6 +37,7 @@ def list_contents(
         exclude_categories=exclude_categories,
         exclude_collections=exclude_collections,
         exclude_contents=exclude_contents,
+        workspace_id=workspace_id,
     )
     return {
         "items": [item.model_dump(mode="json") for item in page.items],
@@ -44,7 +47,7 @@ def list_contents(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Search contents',
+        title="Search contents",
         readOnlyHint=True,
         destructiveHint=False,
         openWorldHint=True,
@@ -53,6 +56,7 @@ def list_contents(
 def search_contents(
     hub_profile_id: str,
     search: str,
+    workspace_id: str,
     only_archived: bool = False,
     types: list[str] | None = None,
     exclude_categories: list[str] | None = None,
@@ -61,6 +65,7 @@ def search_contents(
 ) -> list[dict]:
     """Search content items in a hub profile by keyword.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     types: ["Content"], ["Collection"], or None for both (default)
     """
     items = get_client().contents.search(
@@ -71,49 +76,62 @@ def search_contents(
         exclude_categories=exclude_categories,
         exclude_collections=exclude_collections,
         exclude_contents=exclude_contents,
+        workspace_id=workspace_id,
     )
     return [item.model_dump(mode="json") for item in items]
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Get content',
+        title="Get content",
         readOnlyHint=True,
         destructiveHint=False,
         openWorldHint=True,
     )
 )
-def get_content(content_id: str, hub_profile_id: str | None = None) -> dict:
+def get_content(
+    content_id: str,
+    workspace_id: str,
+    hub_profile_id: str | None = None,
+) -> dict:
     """Get content item details by ID (v1 schema).
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     hub_profile_id: optional, used to resolve access context
     """
     return (
         get_client()
-        .contents.get(content_id, hub_profile_id=hub_profile_id)
+        .contents.get(
+            content_id, hub_profile_id=hub_profile_id, workspace_id=workspace_id
+        )
         .model_dump(mode="json")
     )
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Get content (v2)',
+        title="Get content (v2)",
         readOnlyHint=True,
         destructiveHint=False,
         openWorldHint=True,
     )
 )
-def get_content_v2(content_id: str) -> dict:
+def get_content_v2(content_id: str, workspace_id: str) -> dict:
     """Get content item by ID (v2 schema).
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     Includes main asset, user progression, and extended metadata.
     """
-    return get_client().contents.get_v2(content_id).model_dump(mode="json")
+    return (
+        get_client()
+        .contents.get_v2(content_id, workspace_id=workspace_id)
+        .model_dump(mode="json")
+    )
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Create content',
+        title="Create content",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -122,6 +140,7 @@ def get_content_v2(content_id: str) -> dict:
 def create_content(
     name: str,
     hub_profile_id: str,
+    workspace_id: str,
     privacy: str = "Preview",
     details: str | None = None,
     url: str | None = None,
@@ -133,6 +152,7 @@ def create_content(
 ) -> dict:
     """Create a new content item in a hub profile.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Preview" (default), "Private", or "Public"
     channels: list of channel IDs to place the content in
     main_asset_id: ID of the primary playable asset
@@ -152,13 +172,14 @@ def create_content(
         cover_image=cover_image,
         context=context,
         categories=categories,
+        workspace_id=workspace_id,
     )
     return result.model_dump(mode="json")
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Update content',
+        title="Update content",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -166,6 +187,7 @@ def create_content(
 )
 def update_content(
     content_id: str,
+    workspace_id: str,
     name: str | None = None,
     privacy: str | None = None,
     details: str | None = None,
@@ -179,6 +201,7 @@ def update_content(
 ) -> dict:
     """Update a content item's metadata. Only provided fields are changed.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Preview", "Private", or "Public"
     channels: list of channel IDs (replaces existing placement)
     main_asset_id: ID of the primary playable asset
@@ -200,13 +223,14 @@ def update_content(
         cover_image=cover_image,
         context=context,
         categories=categories,
+        workspace_id=workspace_id,
     )
     return result.model_dump(mode="json")
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Add content to categories',
+        title="Add content to categories",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -216,9 +240,11 @@ def add_content_to_categories(
     content_id: str,
     channel_id: str,
     category_ids: list[str],
+    workspace_id: str,
 ) -> str:
     """Add a content item to one or more channel categories.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:   ID of the content item
     channel_id:   ID of the channel
     category_ids: IDs of the categories inside that channel to add the content to
@@ -230,13 +256,14 @@ def add_content_to_categories(
         channels_categories=[
             ContentChannelUpsert(channel_id=channel_id, category_ids=category_ids)
         ],
+        workspace_id=workspace_id,
     )
     return "added"
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Remove content from categories',
+        title="Remove content from categories",
         readOnlyHint=False,
         destructiveHint=True,
         openWorldHint=True,
@@ -246,11 +273,12 @@ def remove_content_from_categories(
     content_id: str,
     channel_id: str,
     category_ids: list[str],
+    workspace_id: str,
 ) -> str:
     """Remove a content item from one or more channel categories.
 
     The content item itself is not deleted.
-
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:   ID of the content item
     channel_id:   ID of the channel
     category_ids: IDs of the categories to remove the content from
@@ -262,13 +290,14 @@ def remove_content_from_categories(
         channels_categories=[
             ContentChannelUpsert(channel_id=channel_id, category_ids=category_ids)
         ],
+        workspace_id=workspace_id,
     )
     return "removed"
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Move content',
+        title="Move content",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -279,9 +308,11 @@ def move_content(
     channel_id: str,
     category_id: str,
     section_id: str,
+    workspace_id: str,
 ) -> str:
     """Move a content item to a different category section within a channel.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:  ID of the content item to move
     channel_id:  ID of the channel containing the target category
     category_id: ID of the destination category
@@ -292,6 +323,7 @@ def move_content(
         channel_id=channel_id,
         category_id=category_id,
         section_id=section_id,
+        workspace_id=workspace_id,
     )
     return "moved"
 
@@ -303,25 +335,31 @@ def move_content(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Create content section',
+        title="Create content section",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
     )
 )
 def create_content_section(
-    content_id: str, category_name: str, name: str
+    content_id: str,
+    category_name: str,
+    name: str,
+    workspace_id: str,
 ) -> dict | None:
     """Create a section inside a collection content item's category.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     category_name: the name slug of the category (e.g. "week-1")
     """
-    return get_client().contents.create_section(content_id, category_name, name=name)
+    return get_client().contents.create_section(
+        content_id, category_name, name=name, workspace_id=workspace_id
+    )
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Update content section',
+        title="Update content section",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -332,16 +370,24 @@ def update_content_section(
     category_name: str,
     section_id: str,
     name: str,
+    workspace_id: str,
 ) -> dict | None:
-    """Rename a section inside a collection content item's category."""
+    """Rename a section inside a collection content item's category.
+
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
     return get_client().contents.update_section(
-        content_id, category_name, section_id, name=name
+        content_id,
+        category_name,
+        section_id,
+        name=name,
+        workspace_id=workspace_id,
     )
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Delete content section',
+        title="Delete content section",
         readOnlyHint=False,
         destructiveHint=True,
         openWorldHint=True,
@@ -351,9 +397,15 @@ def delete_content_section(
     content_id: str,
     category_name: str,
     section_id: str,
+    workspace_id: str,
 ) -> str:
-    """Delete a section from a collection content item's category. Irreversible."""
-    get_client().contents.delete_section(content_id, category_name, section_id)
+    """Delete a section from a collection content item's category. Irreversible.
+
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
+    get_client().contents.delete_section(
+        content_id, category_name, section_id, workspace_id=workspace_id
+    )
     return "deleted"
 
 
@@ -379,17 +431,17 @@ def delete_content_section(
 # TYPICAL WORKFLOW
 #   1. create_content(...)              → creates the container (plain content)
 #   2. create_content_section(...)      → adds a section to group the sub-items
-#   3. add_content_references(...)      → links existing content as sub-items
+#   3. add_subcontent(...)              → links existing content as sub-items
 #      → the container is now a Collection
-#   4. get_content_references(...)      → lists the nested content (paginated)
-#   5. move_content_reference(...)      → reorders a sub-item within the section
-#   6. delete_content_reference(...)    → removes a sub-item (does not delete it)
+#   4. get_subcontent(...)              → lists the nested content (paginated)
+#   5. move_subcontent(...)             → reorders a sub-item within the section
+#   6. delete_subcontent(...)           → removes a sub-item (does not delete it)
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Add subcontent',
+        title="Add subcontent",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -400,6 +452,7 @@ def add_subcontent(
     category_name: str,
     section_id: str,
     subcontent_ids: list[str],
+    workspace_id: str,
 ) -> str:
     """Link existing content items as subcontent inside a collection section.
 
@@ -407,10 +460,7 @@ def add_subcontent(
     lessons inside a course, or chapters inside a module.  A Content item
     automatically becomes a Collection once it has at least one subcontent item.
 
-    Multiple IDs can be passed in a single call; they are added in the order
-    given.  The items must already exist as standalone content — this call only
-    creates the link, it does not move or copy them.
-
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:     ID of the collection (the parent content item)
     category_name:  "Content" for nested content items, "Asset" for nested assets
     section_id:     ID of the section to add the subcontent into
@@ -422,13 +472,14 @@ def add_subcontent(
         category_name,
         section_id,
         subcontent_ids=subcontent_ids,
+        workspace_id=workspace_id,
     )
     return "added"
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Get subcontent',
+        title="Get subcontent",
         readOnlyHint=True,
         destructiveHint=False,
         openWorldHint=True,
@@ -437,6 +488,7 @@ def add_subcontent(
 def get_subcontent(
     content_id: str,
     category_name: str,
+    workspace_id: str,
     page_size: int = 50,
     cursor: str | None = None,
     order: str = "Asc",
@@ -447,9 +499,7 @@ def get_subcontent(
     category.  Each item includes its id, name, cover, privacy, progression,
     and the section it belongs to.
 
-    Use the returned cursor to fetch the next page.  cursor=None means you are
-    on the last page.
-
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:    ID of the collection (the parent content item)
     category_name: "Content" (nested content items) or "Asset" (nested assets)
     page_size:     items per page (default 50)
@@ -464,6 +514,7 @@ def get_subcontent(
         page_size=page_size,
         cursor=cursor,
         order=order,
+        workspace_id=workspace_id,
     )
     return {
         "items": [item.model_dump(mode="json") for item in page.items],
@@ -473,7 +524,7 @@ def get_subcontent(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Delete subcontent',
+        title="Delete subcontent",
         readOnlyHint=False,
         destructiveHint=True,
         openWorldHint=True,
@@ -484,6 +535,7 @@ def delete_subcontent(
     category_name: str,
     section_id: str,
     subcontent_id: str,
+    workspace_id: str,
 ) -> str:
     """Unlink a subcontent item from a collection section.
 
@@ -491,22 +543,25 @@ def delete_subcontent(
     subcontent item itself is NOT deleted — it continues to exist as a
     standalone content item.
 
-    If all subcontent is removed, the collection reverts to a plain Content item.
-
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:    ID of the collection (the parent content item)
     category_name: "Content" or "Asset"
     section_id:    ID of the section that currently contains the subcontent item
     subcontent_id: ID of the subcontent item to unlink
     """
     get_client().contents.delete_subcontent(
-        content_id, category_name, section_id, subcontent_id
+        content_id,
+        category_name,
+        section_id,
+        subcontent_id,
+        workspace_id=workspace_id,
     )
     return "deleted"
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Move subcontent',
+        title="Move subcontent",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -517,6 +572,7 @@ def move_subcontent(
     category_name: str,
     section_id: str,
     subcontent_id: str,
+    workspace_id: str,
     previous_subcontent_id: str | None = None,
 ) -> str:
     """Reorder a subcontent item within a collection section.
@@ -525,9 +581,7 @@ def move_subcontent(
     Pass previous_subcontent_id=None to move the item to the very first
     position in the section.
 
-    Only the display order changes — no content is created, deleted, or moved
-    to a different section.
-
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:             ID of the collection (the parent content item)
     category_name:          "Content" or "Asset"
     section_id:             ID of the section containing the subcontent item
@@ -541,6 +595,7 @@ def move_subcontent(
         section_id,
         subcontent_id=subcontent_id,
         previous_subcontent_id=previous_subcontent_id,
+        workspace_id=workspace_id,
     )
     return "moved"
 
@@ -552,55 +607,72 @@ def move_subcontent(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Update content progression',
+        title="Update content progression",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
     )
 )
-def patch_content_progression(content_id: str, status: str) -> dict:
+def patch_content_progression(
+    content_id: str,
+    status: str,
+    workspace_id: str,
+) -> dict:
     """Update the current user's progression status for a content item.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     status: "NotStarted", "Incomplete", or "Completed"
     """
     result = get_client().contents.patch_content_progression(
         content_id,
         status=status,  # type: ignore[arg-type]
+        workspace_id=workspace_id,
     )
     return result.model_dump(mode="json")
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Update media progression',
+        title="Update media progression",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
     )
 )
-def patch_media_progression(media_id: str, last_watched_time: int) -> dict | None:
+def patch_media_progression(
+    media_id: str,
+    last_watched_time: int,
+    workspace_id: str,
+) -> dict | None:
     """Update the current user's last watched position in a media asset (seconds).
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     Call periodically during playback to enable resume functionality.
     """
     return get_client().contents.patch_media_progression(
-        media_id, last_watched_time=last_watched_time
+        media_id, last_watched_time=last_watched_time, workspace_id=workspace_id
     )
 
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title='Get progression stats',
+        title="Get progression stats",
         readOnlyHint=True,
         destructiveHint=False,
         openWorldHint=True,
     )
 )
-def get_progression_stats(collection_id: str | None = None) -> dict:
+def get_progression_stats(
+    workspace_id: str,
+    collection_id: str | None = None,
+) -> dict:
     """Get completion statistics for the current user.
 
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
     Pass collection_id to scope to a specific collection.
     Returns total content count and how many the user has completed.
     """
-    result = get_client().contents.get_progression_stats(collection_id=collection_id)
+    result = get_client().contents.get_progression_stats(
+        collection_id=collection_id, workspace_id=workspace_id
+    )
     return result.model_dump(mode="json")

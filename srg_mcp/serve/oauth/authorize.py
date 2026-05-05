@@ -3,18 +3,19 @@
 Flow:
 1. claude.ai redirects the browser to GET /oauth/authorize?... with PKCE
    challenge + redirect_uri. We render a branded consent page asking the
-   user to paste their SRG+ workspace API key. A CSRF token is embedded in
-   the form.
-2. User pastes their API key and submits. We POST back to /oauth/authorize.
-   We validate CSRF, validate the api_key against SRG+ (live call), encrypt
-   it with AES-GCM, and embed it in an authorization-code JWT. We redirect
-   the browser back to claude.ai's redirect_uri with ``?code=<jwt>&state=...``.
+   user to paste their SRG+ API key(s). A CSRF token is embedded in the form.
+2. User pastes one or more API keys (one per line or comma-separated) and
+   submits. We POST back to /oauth/authorize. We validate CSRF, validate the
+   keys against SRG+ (live call), and store them as a comma-joined string
+   encrypted with AES-GCM inside an authorization-code JWT. We redirect the
+   browser back to claude.ai's redirect_uri with ``?code=<jwt>&state=...``.
 
 Open-redirect prevention: ``redirect_uri`` MUST exactly match one of the
 client's registered URIs (parsed component-by-component, not string
 suffix). Mismatches render a 400 page — we never redirect to an
 unrecognized URI.
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from .dcr import decode_client_id
-from .errors import InvalidGrant, InvalidRedirectURI, InvalidRequest, OAuthError
+from .errors import InvalidRedirectURI, InvalidRequest, OAuthError
 from .jwt_codec import (
     encode_hs256,
     encrypt_api_key,
@@ -42,6 +43,7 @@ from .store import make_csrf_token, verify_csrf_token
 
 def _issuer() -> str:
     return os.environ.get("OAUTH_ISSUER", "https://mcp.srgplus.com").rstrip("/")
+
 
 logger = logging.getLogger("srgplus-mcp-serve.oauth")
 
@@ -156,9 +158,7 @@ def _render_consent(
         else ""
     )
     form_action = f"'self' {redirect_origin}".strip()
-    csp = (
-        f"default-src 'self'; style-src 'unsafe-inline'; form-action {form_action}"
-    )
+    csp = f"default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action {form_action}"
     # Defensive headers: never let consent pages get cached or framed.
     return HTMLResponse(
         html,
@@ -228,7 +228,7 @@ async def authorize_post(request: Request) -> Response:
     code_challenge_method = form.get("code_challenge_method", "")
     state = form.get("state", "")
     scope = form.get("scope") or "mcp:full"
-    api_key = form.get("api_key", "")
+    api_key_raw = form.get("api_key", "")
 
     # Validate OAuth params first — same checks as GET. If they fail, render
     # the error page (do not redirect: the redirect_uri may be malicious).
@@ -259,10 +259,15 @@ async def authorize_post(request: Request) -> Response:
             error="Your session expired. Please try again.",
         )
 
-    # Live-validate the API key against SRG+. If anything goes wrong (auth or
-    # any other error), we surface a *uniform* "Invalid API key" message —
-    # never leak which check failed.
-    if not api_key or not isinstance(api_key, str):
+    # Parse comma-separated api_keys (supports one or many).
+    # Normalize: strip whitespace + newlines around each key, drop empties.
+    api_keys_list = [
+        k.strip() for k in api_key_raw.replace("\n", ",").split(",") if k.strip()
+    ]
+
+    # Live-validate all keys against SRG+ at once. We surface a uniform
+    # "Invalid API key" on failure — never leak which check failed.
+    if not api_keys_list or not _validate_api_keys(api_keys_list):
         return _render_consent(
             client_id=client_id,
             redirect_uri=redirect_uri,
@@ -275,18 +280,8 @@ async def authorize_post(request: Request) -> Response:
             error="Invalid API key.",
         )
 
-    if not _validate_api_key(api_key):
-        return _render_consent(
-            client_id=client_id,
-            redirect_uri=redirect_uri,
-            response_type=response_type,
-            code_challenge=code_challenge,
-            code_challenge_method=code_challenge_method,
-            state=state,
-            scope=scope,
-            client_name=client.get("client_name") or "Unnamed Client",
-            error="Invalid API key.",
-        )
+    # Store as comma-joined string in the JWT so multi-key entries round-trip.
+    api_keys_str = ",".join(api_keys_list)
 
     # Mint the authorization code JWT.
     now = int(time.time())
@@ -300,7 +295,7 @@ async def authorize_post(request: Request) -> Response:
             "redirect_uri": redirect_uri,
             "code_challenge": code_challenge,
             "code_challenge_method": code_challenge_method,
-            "api_key_encrypted": encrypt_api_key(api_key),
+            "api_key_encrypted": encrypt_api_key(api_keys_str),
             "scope": scope,
         },
         token_signing_key(),
@@ -330,31 +325,28 @@ async def authorize_post(request: Request) -> Response:
 
     # 302 (Found) is the historical OAuth choice; some legacy clients
     # mishandle 303. Either is spec-compliant.
-    return RedirectResponse(location, status_code=302, headers={"Cache-Control": "no-store"})
+    return RedirectResponse(
+        location, status_code=302, headers={"Cache-Control": "no-store"}
+    )
 
 
-def _validate_api_key(api_key: str) -> bool:
-    """Live-check the api_key against SRG+.
+def _validate_api_keys(api_keys: list[str]) -> bool:
+    """Live-check one or more api_keys against SRG+.
 
-    The SDK's ``SRGClient(api_key=...)`` constructor calls
-    ``/api/v1/workspaces`` to bootstrap the workspace_id; that's our auth
-    probe. A short-lived client avoids touching the shared base client's
-    contextvar before consent completes.
+    Attempts ``SRGClient(api_keys=...)``; the constructor calls
+    ``/api/v1/workspaces`` for each key and populates the registry with
+    valid ones (invalid keys are silently skipped). Returns True if at
+    least one key resolved to a workspace.
 
-    We deliberately conflate AuthenticationError and any other exception
-    (network, server error) into a single "invalid" return — the user-visible
-    error is uniform ("Invalid API key") to avoid leaking which check failed.
+    We conflate all failure modes into a single False return — the
+    user-visible error is uniform ("Invalid API key") to avoid leaking
+    which check failed.
     """
     try:
-        srg.SRGClient(api_key=api_key, timeout=10.0)
-        return True
-    except srg.AuthenticationError:
-        return False
+        client = srg.SRGClient(api_keys=api_keys, timeout=10.0)
+        return len(client.workspace_ids) > 0
     except Exception as exc:
         # Log the exception TYPE only — never include `exc` directly in case
-        # the message embeds the api_key. Operators can still see "what kind"
-        # of failure happened (timeouts, 5xx, DNS) without the credential.
-        logger.warning(
-            "API key validation failed (%s)", type(exc).__name__
-        )
+        # the message embeds the api_key.
+        logger.warning("API key validation failed (%s)", type(exc).__name__)
         return False

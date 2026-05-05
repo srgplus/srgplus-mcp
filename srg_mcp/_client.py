@@ -2,31 +2,21 @@
 
 Two execution modes:
 
-1. **Local stdio** — single-tenant. ``SRG_API_KEY`` from the env (or
+1. **Local stdio** — single-tenant. ``SRG_API_KEYS`` from the env (or
    ``.env``) is the only key. Falls through to a single cached
    ``SRGClient()`` which the SDK bootstraps from the env var.
 
 2. **Hosted server (multi-tenant)** — every incoming HTTP request first
    binds its api_key into ``_current_key_var`` (see ``serve/main.py``).
-   Tools then call ``get_client()`` and receive a per-key ``SRGClient``
-   from the LRU cache. Each per-key client eagerly bootstraps its own
-   ``workspace_id`` at construction time, which is required because the
-   SDK bakes ``workspace_id`` into its ``hub_profiles`` / ``workspaces``
-   resources via ``@cached_property`` — a single shared client cannot
-   serve two workspaces correctly.
-
-The LRU cap (1024 entries) keeps memory bounded under DoS-style traffic
-without ever evicting the active set in normal use — Cloud Run instances
-serving more than ~1024 distinct workspaces concurrently is well past the
-point we'd shard / migrate to Redis-backed state anyway.
+   Tools then call ``get_client()`` and receive a per-key ``SRGClient``.
 """
+
 from __future__ import annotations
 
 import contextvars
 import threading
 
 import srg
-from cachetools import LRUCache
 from dotenv import load_dotenv
 
 # Per-request api_key. ``serve/main.py`` sets this before dispatching the
@@ -35,7 +25,7 @@ _current_key_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "srg_mcp_current_api_key", default=None
 )
 
-_clients_by_key: LRUCache = LRUCache(maxsize=1024)
+_clients: dict[str, srg.SRGClient] = {}
 _clients_lock = threading.Lock()
 _dotenv_loaded = False
 
@@ -66,24 +56,16 @@ def get_client() -> srg.SRGClient:
 
     Hosted-server path: ``_current_key_var`` is set; we look up (or build)
     the per-key client. Stdio path: contextvar is unset; we use the SDK's
-    env-driven default.
+    env-driven default (``SRG_API_KEYS`` env var).
     """
     key = _current_key_var.get()
-    if key is None:
-        _ensure_dotenv_once()
-        with _clients_lock:
-            client = _clients_by_key.get("__env_default__")
-            if client is None:
-                client = srg.SRGClient()  # picks up SRG_API_KEY
-                _clients_by_key["__env_default__"] = client
-            return client
-
+    cache_key = key or "__env_default__"
     with _clients_lock:
-        client = _clients_by_key.get(key)
-        if client is None:
-            # Constructor eagerly fetches /api/v1/workspaces and caches
-            # workspace_id on the instance — exactly what we need for the
-            # SDK's cached_property resources to point at the right tenant.
-            client = srg.SRGClient(api_key=key)
-            _clients_by_key[key] = client
-        return client
+        if cache_key not in _clients:
+            if key is None:
+                _ensure_dotenv_once()
+                _clients[cache_key] = srg.SRGClient()  # picks up SRG_API_KEYS
+            else:
+                keys_list = [k.strip() for k in key.split(",") if k.strip()]
+                _clients[cache_key] = srg.SRGClient(api_keys=keys_list)
+        return _clients[cache_key]

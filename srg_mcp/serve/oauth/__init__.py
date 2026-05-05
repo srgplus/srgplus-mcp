@@ -19,6 +19,7 @@ Spec coverage:
 * RFC 7009 — Token Revocation
 * OAuth 2.1 (draft-ietf-oauth-v2-1) — public client / PKCE-mandatory profile
 """
+
 from __future__ import annotations
 
 from starlette.routing import Route

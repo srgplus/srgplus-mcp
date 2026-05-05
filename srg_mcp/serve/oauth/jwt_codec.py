@@ -14,6 +14,7 @@ In dev, missing secrets are filled with random per-process values and a
 warning is logged — sessions die when the process restarts. In prod, these
 must be set via GCP Secret Manager.
 """
+
 from __future__ import annotations
 
 import base64

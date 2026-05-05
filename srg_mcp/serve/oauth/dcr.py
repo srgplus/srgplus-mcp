@@ -10,6 +10,7 @@ replica can serve any client_id without a shared DB. The trade-off: we can't
 revoke a single client by deleting it from a table. If we ever need
 revocation, we add a deny-list keyed on the client_id JWT's ``jti``.
 """
+
 from __future__ import annotations
 
 import time
@@ -32,15 +33,11 @@ _DEFAULT_TOKEN_AUTH = "none"
 
 def _parse_redirect_uris(value: Any) -> list[str]:
     if not isinstance(value, list) or not value:
-        raise InvalidRequest(
-            "redirect_uris must be a non-empty array of strings."
-        )
+        raise InvalidRequest("redirect_uris must be a non-empty array of strings.")
     out: list[str] = []
     for uri in value:
         if not isinstance(uri, str) or not uri.strip():
-            raise InvalidRequest(
-                "redirect_uris must contain non-empty string values."
-            )
+            raise InvalidRequest("redirect_uris must contain non-empty string values.")
         # We require an absolute URL with a scheme. We do NOT lock the scheme
         # to https — claude.ai uses https, but local dev clients (Cursor,
         # MCP Inspector) sometimes use http://localhost. The actual security

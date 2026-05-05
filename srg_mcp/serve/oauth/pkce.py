@@ -4,6 +4,7 @@ The client picks a random ``code_verifier`` and sends ``code_challenge =
 BASE64URL-NO-PAD(SHA256(verifier))`` to /authorize. At /token they send the
 raw verifier; we recompute the challenge and compare timing-safely.
 """
+
 from __future__ import annotations
 
 import base64
