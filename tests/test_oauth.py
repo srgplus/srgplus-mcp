@@ -163,7 +163,9 @@ async def test_authorization_server_metadata(client):
     assert body["code_challenge_methods_supported"] == ["S256"]
     assert "authorization_code" in body["grant_types_supported"]
     assert "refresh_token" in body["grant_types_supported"]
-    assert body["token_endpoint_auth_methods_supported"] == ["none"]
+    assert "none" in body["token_endpoint_auth_methods_supported"]
+    assert "client_secret_basic" in body["token_endpoint_auth_methods_supported"]
+    assert "client_secret_post" in body["token_endpoint_auth_methods_supported"]
     assert body["response_modes_supported"] == ["query"]
     assert body["client_id_metadata_document_supported"] is False
 
