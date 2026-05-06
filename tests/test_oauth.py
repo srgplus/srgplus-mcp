@@ -169,15 +169,40 @@ async def test_authorization_server_metadata(client):
 
 @pytest.mark.asyncio
 async def test_authorization_server_metadata_path_suffix(client):
-    """ChatGPT's MCP connector probes ``/.well-known/oauth-authorization-server/mcp``;
-    we serve identical metadata there so the wizard doesn't reject the server with
-    "OAuth discovery returned unsupported OAuth config type" (regression: PR #6
-    added the path-suffix variant for protected-resource only)."""
+    """Path-suffix variant per RFC 8414 §3.1 (defensive — some clients
+    construct it even though our issuer has no path component)."""
     r = await client.get("/.well-known/oauth-authorization-server/mcp")
     assert r.status_code == 200
     body = r.json()
     assert body["issuer"] == "http://localhost:8090"
     assert body["authorization_endpoint"].endswith("/oauth/authorize")
+    assert body["code_challenge_methods_supported"] == ["S256"]
+
+
+@pytest.mark.asyncio
+async def test_openid_configuration_alias(client):
+    """OpenAI Apps SDK wizard probes ``/.well-known/openid-configuration``
+    as part of its config-type detection; a 404 there causes the wizard
+    to reject the server with "OAuth discovery returned unsupported OAuth
+    config type". Verified via Cloud Run logs 2026-05-06. We alias to the
+    OAuth AS metadata handler — the discoverer accepts the same payload."""
+    r = await client.get("/.well-known/openid-configuration")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["issuer"] == "http://localhost:8090"
+    assert body["authorization_endpoint"].endswith("/oauth/authorize")
+    assert body["token_endpoint"].endswith("/oauth/token")
+    assert body["code_challenge_methods_supported"] == ["S256"]
+
+
+@pytest.mark.asyncio
+async def test_openid_configuration_path_suffix(client):
+    """Defensive: path-suffixed OIDC discovery variant returns the same
+    metadata, in case a client constructs the URL from the resource path."""
+    r = await client.get("/.well-known/openid-configuration/mcp")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["issuer"] == "http://localhost:8090"
     assert body["code_challenge_methods_supported"] == ["S256"]
 
 
