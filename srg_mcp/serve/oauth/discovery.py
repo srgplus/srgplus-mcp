@@ -64,7 +64,16 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
             "response_types_supported": ["code"],
             "response_modes_supported": ["query"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
-            "token_endpoint_auth_methods_supported": ["none"],
+            # OpenAI's wizard parser requires client_secret_basic and
+            # client_secret_post to be advertised (matches Notion + Linear).
+            # We're a public-client + PKCE provider — DCR enforces ``none`` —
+            # but the metadata accepts the broader set. Real clients
+            # (claude.ai, OpenAI Apps SDK) request ``none`` during DCR.
+            "token_endpoint_auth_methods_supported": [
+                "client_secret_basic",
+                "client_secret_post",
+                "none",
+            ],
             "code_challenge_methods_supported": ["S256"],
             "client_id_metadata_document_supported": False,
         }
