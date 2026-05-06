@@ -59,6 +59,19 @@ def get_routes() -> list[Route]:
             endpoint=authorization_server_metadata,
             methods=["GET"],
         ),
+        # ChatGPT's MCP connector (OpenAI Apps SDK) probes the path-suffixed
+        # AS metadata URL — ``/.well-known/oauth-authorization-server/mcp`` —
+        # mirroring the RFC 9728 §3.1 construction it uses for protected-
+        # resource metadata. RFC 8414 §3.1 only mandates the path suffix when
+        # the issuer itself has a path component (ours doesn't), but ChatGPT
+        # is stricter and 404 here causes the wizard to reject the server
+        # with "OAuth discovery returned unsupported OAuth config type".
+        # Same metadata at both shapes; the path suffix is ignored.
+        Route(
+            "/.well-known/oauth-authorization-server/{path:path}",
+            endpoint=authorization_server_metadata,
+            methods=["GET"],
+        ),
         Route(
             "/.well-known/oauth-protected-resource",
             endpoint=protected_resource_metadata,

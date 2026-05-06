@@ -168,6 +168,20 @@ async def test_authorization_server_metadata(client):
 
 
 @pytest.mark.asyncio
+async def test_authorization_server_metadata_path_suffix(client):
+    """ChatGPT's MCP connector probes ``/.well-known/oauth-authorization-server/mcp``;
+    we serve identical metadata there so the wizard doesn't reject the server with
+    "OAuth discovery returned unsupported OAuth config type" (regression: PR #6
+    added the path-suffix variant for protected-resource only)."""
+    r = await client.get("/.well-known/oauth-authorization-server/mcp")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["issuer"] == "http://localhost:8090"
+    assert body["authorization_endpoint"].endswith("/oauth/authorize")
+    assert body["code_challenge_methods_supported"] == ["S256"]
+
+
+@pytest.mark.asyncio
 async def test_protected_resource_metadata(client):
     r = await client.get("/.well-known/oauth-protected-resource")
     assert r.status_code == 200
@@ -175,6 +189,16 @@ async def test_protected_resource_metadata(client):
     assert body["resource"].endswith("/mcp")
     assert "http://localhost:8090" in body["authorization_servers"]
     assert body["bearer_methods_supported"] == ["header"]
+
+
+@pytest.mark.asyncio
+async def test_protected_resource_metadata_path_suffix(client):
+    """RFC 9728 §3.1 path-suffix variant — same metadata as the bare URL."""
+    r = await client.get("/.well-known/oauth-protected-resource/mcp")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["resource"].endswith("/mcp")
+    assert "http://localhost:8090" in body["authorization_servers"]
 
 
 # ----------------------------------------------------------------- DCR
