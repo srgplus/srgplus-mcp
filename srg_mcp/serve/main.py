@@ -150,61 +150,6 @@ def _www_authenticate_header() -> tuple[bytes, bytes]:
     return (b"www-authenticate", value.encode())
 
 
-_UNAUTHENTICATED_MCP_METHODS = {
-    "initialize",
-    "notifications/initialized",
-    "ping",
-    "tools/list",
-}
-
-
-async def _read_body(receive) -> bytes:
-    """Read an ASGI request body so it can be inspected and replayed."""
-    chunks: list[bytes] = []
-    more_body = True
-    while more_body:
-        message = await receive()
-        chunks.append(message.get("body", b""))
-        more_body = message.get("more_body", False)
-    return b"".join(chunks)
-
-
-def _replay_body(body: bytes):
-    """Return a receive callable that replays a previously read body once."""
-    sent = False
-
-    async def receive():
-        nonlocal sent
-        if sent:
-            return {"type": "http.request", "body": b"", "more_body": False}
-        sent = True
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    return receive
-
-
-def _is_unauthenticated_metadata_request(body: bytes) -> bool:
-    """Allow public descriptor scans while keeping tool execution protected."""
-    if not body:
-        return False
-    try:
-        payload = json.loads(body)
-    except json.JSONDecodeError:
-        return False
-
-    messages = payload if isinstance(payload, list) else [payload]
-    if not messages:
-        return False
-
-    for message in messages:
-        if not isinstance(message, dict):
-            return False
-        method = message.get("method")
-        if method not in _UNAUTHENTICATED_MCP_METHODS:
-            return False
-    return True
-
-
 async def _send_json(
     send, status: int, body: dict, *, extra_headers: list | None = None
 ) -> None:
@@ -261,13 +206,6 @@ class _MCPEndpoint:
                     api_key = oauth.verify_access_token(bearer)
                 except oauth.OAuthError:
                     api_key = None
-
-        body = b""
-        if not api_key and scope.get("method") == "POST":
-            body = await _read_body(receive)
-            if _is_unauthenticated_metadata_request(body):
-                await _session_manager.handle_request(scope, _replay_body(body), send)
-                return
 
         if not api_key:
             await _send_json(
