@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "srgplus-mcp"
-version = "0.4.14"
+version = "0.4.15"
 description = "MCP server for SRG+ — manage hubs, channels, content, assets, users, and workspaces from any MCP-aware agent."
 readme = "README.md"
 requires-python = ">=3.11"

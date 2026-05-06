@@ -160,7 +160,7 @@ async def test_authorization_server_metadata(client):
     assert body["token_endpoint"].endswith("/oauth/token")
     assert body["registration_endpoint"].endswith("/oauth/register")
     assert body["revocation_endpoint"].endswith("/oauth/revoke")
-    assert body["code_challenge_methods_supported"] == ["S256"]
+    assert "S256" in body["code_challenge_methods_supported"]
     assert "authorization_code" in body["grant_types_supported"]
     assert "refresh_token" in body["grant_types_supported"]
     assert "none" in body["token_endpoint_auth_methods_supported"]
@@ -179,7 +179,7 @@ async def test_authorization_server_metadata_path_suffix(client):
     body = r.json()
     assert body["issuer"] == "http://localhost:8090"
     assert body["authorization_endpoint"].endswith("/oauth/authorize")
-    assert body["code_challenge_methods_supported"] == ["S256"]
+    assert "S256" in body["code_challenge_methods_supported"]
 
 
 @pytest.mark.asyncio

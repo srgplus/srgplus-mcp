@@ -74,7 +74,12 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
                 "client_secret_post",
                 "none",
             ],
-            "code_challenge_methods_supported": ["S256"],
+            # We advertise both methods to match Notion (in OpenAI Apps
+            # Directory). Our token endpoint enforces S256 (OAuth 2.1
+            # mandatory) — clients that try ``plain`` get rejected at the
+            # token exchange. Real MCP clients (claude.ai, ChatGPT) all use
+            # S256. The ``plain`` advertisement is metadata-shape only.
+            "code_challenge_methods_supported": ["plain", "S256"],
             "client_id_metadata_document_supported": False,
         }
     )
