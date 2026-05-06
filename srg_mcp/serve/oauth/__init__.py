@@ -59,22 +59,6 @@ def get_routes() -> list[Route]:
             endpoint=authorization_server_metadata,
             methods=["GET"],
         ),
-        # Path-suffix variant per RFC 8414 §3.1 — strictly only mandated when
-        # the issuer URL itself has a path component (ours doesn't), but some
-        # MCP clients construct it anyway by mirroring RFC 9728 §3.1. Cheap
-        # defensive route; same handler.
-        Route(
-            "/.well-known/oauth-authorization-server/{path:path}",
-            endpoint=authorization_server_metadata,
-            methods=["GET"],
-        ),
-        # NOTE: We deliberately do NOT serve /.well-known/openid-configuration.
-        # Notion and Linear (both known-working with the OpenAI Apps SDK)
-        # return 404 here, and OpenAI's parser uses the 404 to mark the
-        # config as plain OAuth 2.1 (not OIDC). Earlier PRs #21-23 served
-        # OIDC metadata here on the (incorrect) hypothesis that the 404 was
-        # the problem — it wasn't, and the 200 actually misled the parser
-        # into doing OIDC validation that we're not really an OIDC provider.
         Route(
             "/.well-known/oauth-protected-resource",
             endpoint=protected_resource_metadata,

@@ -46,12 +46,6 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
     Public clients only (no token_endpoint_auth_method beyond ``none``); PKCE
     S256 mandatory; both ``authorization_code`` and ``refresh_token`` grants
     are supported.
-
-    Field set is kept tight to match the working OpenAI Apps SDK
-    submissions (mcp.notion.com, mcp.linear.app). The OpenAI wizard's
-    backend appears to use a strict-schema parser (extras → 500 / "unsupported
-    OAuth config type"). Branding (logo) is conveyed via the protected-resource
-    metadata + per-resource extras, not the AS metadata.
     """
     issuer = _issuer()
     return JSONResponse(
@@ -62,20 +56,23 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
             "registration_endpoint": f"{issuer}/oauth/register",
             "revocation_endpoint": f"{issuer}/oauth/revoke",
             "response_types_supported": ["code"],
-            "response_modes_supported": ["query"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
-            # OpenAI's wizard parser requires client_secret_basic and
-            # client_secret_post to be advertised (matches Notion + Linear).
-            # We're a public-client + PKCE provider — DCR enforces ``none`` —
-            # but the metadata accepts the broader set. Real clients
-            # (claude.ai, OpenAI Apps SDK) request ``none`` during DCR.
-            "token_endpoint_auth_methods_supported": [
-                "client_secret_basic",
-                "client_secret_post",
-                "none",
-            ],
             "code_challenge_methods_supported": ["S256"],
-            "client_id_metadata_document_supported": False,
+            "token_endpoint_auth_methods_supported": ["none"],
+            "scopes_supported": ["mcp:full"],
+            # RFC 9207 — we include ``iss`` in every authorization response
+            # so clients can detect AS mix-up attacks.
+            "authorization_response_iss_parameter_supported": True,
+            # Branding. RFC 8414 doesn't define a logo field, so we advertise
+            # the icon under both common conventions:
+            # - ``op_logo_uri`` — the ``op_*`` extension namespace from the
+            #   OpenID Connect Discovery family (read by some MCP clients).
+            # - ``logo_uri`` — the field name from RFC 7591 client metadata,
+            #   which Anthropic Console and other connector catalogs reuse
+            #   when scraping AS metadata for an icon.
+            "op_logo_uri": _logo_uri(),
+            "logo_uri": _logo_uri(),
+            "service_documentation": _DOCUMENTATION_URL,
         }
     )
 
@@ -85,17 +82,19 @@ async def protected_resource_metadata(request: Request) -> JSONResponse:
 
     Tells clients which AS issues tokens for this MCP endpoint. Claude.ai's
     web wizard fetches this first to bootstrap the OAuth dance.
-
-    Field set kept minimal to match working OpenAI Apps SDK submissions
-    (mcp.notion.com). Logo + scope detail belongs in the connector listing,
-    not in metadata.
     """
     issuer = _issuer()
     return JSONResponse(
         {
             "resource": _resource_uri(),
             "authorization_servers": [issuer],
+            "scopes_supported": ["mcp:full"],
             "bearer_methods_supported": ["header"],
-            "resource_name": "SRG+ MCP",
+            "resource_documentation": _DOCUMENTATION_URL,
+            # Branding — same logo URI advertised on the AS metadata so a
+            # client that only fetches the protected-resource doc still has
+            # the icon URL. Both conventions exposed (see AS metadata above).
+            "op_logo_uri": _logo_uri(),
+            "logo_uri": _logo_uri(),
         }
     )

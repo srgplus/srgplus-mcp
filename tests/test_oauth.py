@@ -163,34 +163,8 @@ async def test_authorization_server_metadata(client):
     assert body["code_challenge_methods_supported"] == ["S256"]
     assert "authorization_code" in body["grant_types_supported"]
     assert "refresh_token" in body["grant_types_supported"]
-    assert "none" in body["token_endpoint_auth_methods_supported"]
-    assert "client_secret_basic" in body["token_endpoint_auth_methods_supported"]
-    assert "client_secret_post" in body["token_endpoint_auth_methods_supported"]
-    assert body["response_modes_supported"] == ["query"]
-    assert body["client_id_metadata_document_supported"] is False
-
-
-@pytest.mark.asyncio
-async def test_authorization_server_metadata_path_suffix(client):
-    """Path-suffix variant per RFC 8414 §3.1 (defensive — some clients
-    construct it even though our issuer has no path component)."""
-    r = await client.get("/.well-known/oauth-authorization-server/mcp")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["issuer"] == "http://localhost:8090"
-    assert body["authorization_endpoint"].endswith("/oauth/authorize")
-    assert body["code_challenge_methods_supported"] == ["S256"]
-
-
-@pytest.mark.asyncio
-async def test_openid_configuration_returns_404(client):
-    """We deliberately don't serve OIDC discovery — Notion and Linear (both
-    known-working with the OpenAI Apps SDK) return 404 and OpenAI's parser
-    uses the 404 to classify as plain OAuth 2.1 (not OIDC). Earlier PRs
-    served OIDC metadata here on the wrong hypothesis; the 200 misled the
-    parser into doing OIDC validation we couldn't satisfy."""
-    r = await client.get("/.well-known/openid-configuration")
-    assert r.status_code == 404
+    assert body["token_endpoint_auth_methods_supported"] == ["none"]
+    assert "mcp:full" in body["scopes_supported"]
 
 
 @pytest.mark.asyncio
@@ -201,16 +175,6 @@ async def test_protected_resource_metadata(client):
     assert body["resource"].endswith("/mcp")
     assert "http://localhost:8090" in body["authorization_servers"]
     assert body["bearer_methods_supported"] == ["header"]
-
-
-@pytest.mark.asyncio
-async def test_protected_resource_metadata_path_suffix(client):
-    """RFC 9728 §3.1 path-suffix variant — same metadata as the bare URL."""
-    r = await client.get("/.well-known/oauth-protected-resource/mcp")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["resource"].endswith("/mcp")
-    assert "http://localhost:8090" in body["authorization_servers"]
 
 
 # ----------------------------------------------------------------- DCR

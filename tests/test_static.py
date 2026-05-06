@@ -79,26 +79,18 @@ async def test_static_unknown_filename_returns_404(client):
 
 
 @pytest.mark.asyncio
-async def test_authorization_server_metadata_minimal_field_set(client):
-    """AS metadata kept tight — extras break OpenAI's strict-schema parser
-    ("unsupported OAuth config type" 500). Branding lives in the connector
-    listing + protected-resource extras, not in AS metadata."""
+async def test_authorization_server_metadata_advertises_logo(client):
     r = await client.get("/.well-known/oauth-authorization-server")
     assert r.status_code == 200
     body = r.json()
-    assert "op_logo_uri" not in body
-    assert "logo_uri" not in body
-    assert "service_documentation" not in body
-    assert "scopes_supported" not in body
+    assert body["op_logo_uri"] == "http://localhost:8090/static/icon-512.png"
+    assert body["service_documentation"] == "https://github.com/srgplus/srgplus-mcp"
 
 
 @pytest.mark.asyncio
-async def test_protected_resource_metadata_minimal_field_set(client):
-    """Protected-resource trimmed to match Notion/Linear minimal shape."""
+async def test_protected_resource_metadata_advertises_logo(client):
     r = await client.get("/.well-known/oauth-protected-resource")
     assert r.status_code == 200
     body = r.json()
-    assert body["resource_name"] == "SRG+ MCP"
-    assert "op_logo_uri" not in body
-    assert "logo_uri" not in body
-    assert "resource_documentation" not in body
+    assert body["op_logo_uri"] == "http://localhost:8090/static/icon-512.png"
+    assert body["resource_documentation"] == "https://github.com/srgplus/srgplus-mcp"
