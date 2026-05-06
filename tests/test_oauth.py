@@ -183,44 +183,14 @@ async def test_authorization_server_metadata_path_suffix(client):
 
 
 @pytest.mark.asyncio
-async def test_openid_configuration_metadata(client):
-    """OpenAI Apps SDK wizard probes ``/.well-known/openid-configuration``
-    and rejects responses missing OIDC Discovery 1.0 required fields with
-    "OAuth discovery returned unsupported OAuth config type". Verified via
-    Cloud Run logs 2026-05-06."""
+async def test_openid_configuration_returns_404(client):
+    """We deliberately don't serve OIDC discovery — Notion and Linear (both
+    known-working with the OpenAI Apps SDK) return 404 and OpenAI's parser
+    uses the 404 to classify as plain OAuth 2.1 (not OIDC). Earlier PRs
+    served OIDC metadata here on the wrong hypothesis; the 200 misled the
+    parser into doing OIDC validation we couldn't satisfy."""
     r = await client.get("/.well-known/openid-configuration")
-    assert r.status_code == 200
-    body = r.json()
-    # OAuth fields (RFC 8414)
-    assert body["issuer"] == "http://localhost:8090"
-    assert body["authorization_endpoint"].endswith("/oauth/authorize")
-    assert body["token_endpoint"].endswith("/oauth/token")
-    assert body["code_challenge_methods_supported"] == ["S256"]
-    # OIDC Discovery 1.0 required fields — without these the OpenAI
-    # discoverer classifies the config as "unsupported".
-    assert body["subject_types_supported"] == ["public"]
-    assert "RS256" in body["id_token_signing_alg_values_supported"]
-    assert body["jwks_uri"].endswith("/.well-known/jwks.json")
-
-
-@pytest.mark.asyncio
-async def test_jwks_endpoint(client):
-    """Empty JWKS — referenced by openid-configuration's jwks_uri."""
-    r = await client.get("/.well-known/jwks.json")
-    assert r.status_code == 200
-    body = r.json()
-    assert body == {"keys": []}
-
-
-@pytest.mark.asyncio
-async def test_openid_configuration_path_suffix(client):
-    """Defensive: path-suffixed OIDC discovery variant returns the same
-    metadata, in case a client constructs the URL from the resource path."""
-    r = await client.get("/.well-known/openid-configuration/mcp")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["issuer"] == "http://localhost:8090"
-    assert body["subject_types_supported"] == ["public"]
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
