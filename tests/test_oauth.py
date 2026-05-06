@@ -180,23 +180,19 @@ async def test_authorization_server_metadata_path_suffix(client):
 
 
 @pytest.mark.asyncio
-async def test_openid_configuration_metadata(client):
+async def test_openid_configuration_alias(client):
     """OpenAI Apps SDK wizard probes ``/.well-known/openid-configuration``
-    and rejects responses missing OIDC Discovery 1.0 required fields with
-    "OAuth discovery returned unsupported OAuth config type". Verified via
-    Cloud Run logs 2026-05-06."""
+    as part of its config-type detection; a 404 there causes the wizard
+    to reject the server with "OAuth discovery returned unsupported OAuth
+    config type". Verified via Cloud Run logs 2026-05-06. We alias to the
+    OAuth AS metadata handler — the discoverer accepts the same payload."""
     r = await client.get("/.well-known/openid-configuration")
     assert r.status_code == 200
     body = r.json()
-    # OAuth fields (RFC 8414)
     assert body["issuer"] == "http://localhost:8090"
     assert body["authorization_endpoint"].endswith("/oauth/authorize")
     assert body["token_endpoint"].endswith("/oauth/token")
     assert body["code_challenge_methods_supported"] == ["S256"]
-    # OIDC Discovery 1.0 required fields — without these the OpenAI
-    # discoverer classifies the config as "unsupported".
-    assert body["subject_types_supported"] == ["public"]
-    assert "RS256" in body["id_token_signing_alg_values_supported"]
 
 
 @pytest.mark.asyncio
@@ -207,7 +203,7 @@ async def test_openid_configuration_path_suffix(client):
     assert r.status_code == 200
     body = r.json()
     assert body["issuer"] == "http://localhost:8090"
-    assert body["subject_types_supported"] == ["public"]
+    assert body["code_challenge_methods_supported"] == ["S256"]
 
 
 @pytest.mark.asyncio
