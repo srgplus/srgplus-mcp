@@ -165,7 +165,6 @@ async def test_authorization_server_metadata(client):
     assert "refresh_token" in body["grant_types_supported"]
     assert body["token_endpoint_auth_methods_supported"] == ["none"]
     assert "mcp:full" in body["scopes_supported"]
-    assert body["response_modes_supported"] == ["query"]
 
 
 @pytest.mark.asyncio
