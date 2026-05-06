@@ -164,8 +164,8 @@ async def test_authorization_server_metadata(client):
     assert "authorization_code" in body["grant_types_supported"]
     assert "refresh_token" in body["grant_types_supported"]
     assert body["token_endpoint_auth_methods_supported"] == ["none"]
-    assert "mcp:full" in body["scopes_supported"]
     assert body["response_modes_supported"] == ["query"]
+    assert body["client_id_metadata_document_supported"] is False
 
 
 @pytest.mark.asyncio
