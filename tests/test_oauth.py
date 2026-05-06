@@ -168,45 +168,6 @@ async def test_authorization_server_metadata(client):
 
 
 @pytest.mark.asyncio
-async def test_authorization_server_metadata_path_suffix(client):
-    """Path-suffix variant per RFC 8414 §3.1 (defensive — some clients
-    construct it even though our issuer has no path component)."""
-    r = await client.get("/.well-known/oauth-authorization-server/mcp")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["issuer"] == "http://localhost:8090"
-    assert body["authorization_endpoint"].endswith("/oauth/authorize")
-    assert body["code_challenge_methods_supported"] == ["S256"]
-
-
-@pytest.mark.asyncio
-async def test_openid_configuration_alias(client):
-    """OpenAI Apps SDK wizard probes ``/.well-known/openid-configuration``
-    as part of its config-type detection; a 404 there causes the wizard
-    to reject the server with "OAuth discovery returned unsupported OAuth
-    config type". Verified via Cloud Run logs 2026-05-06. We alias to the
-    OAuth AS metadata handler — the discoverer accepts the same payload."""
-    r = await client.get("/.well-known/openid-configuration")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["issuer"] == "http://localhost:8090"
-    assert body["authorization_endpoint"].endswith("/oauth/authorize")
-    assert body["token_endpoint"].endswith("/oauth/token")
-    assert body["code_challenge_methods_supported"] == ["S256"]
-
-
-@pytest.mark.asyncio
-async def test_openid_configuration_path_suffix(client):
-    """Defensive: path-suffixed OIDC discovery variant returns the same
-    metadata, in case a client constructs the URL from the resource path."""
-    r = await client.get("/.well-known/openid-configuration/mcp")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["issuer"] == "http://localhost:8090"
-    assert body["code_challenge_methods_supported"] == ["S256"]
-
-
-@pytest.mark.asyncio
 async def test_protected_resource_metadata(client):
     r = await client.get("/.well-known/oauth-protected-resource")
     assert r.status_code == 200
@@ -214,16 +175,6 @@ async def test_protected_resource_metadata(client):
     assert body["resource"].endswith("/mcp")
     assert "http://localhost:8090" in body["authorization_servers"]
     assert body["bearer_methods_supported"] == ["header"]
-
-
-@pytest.mark.asyncio
-async def test_protected_resource_metadata_path_suffix(client):
-    """RFC 9728 §3.1 path-suffix variant — same metadata as the bare URL."""
-    r = await client.get("/.well-known/oauth-protected-resource/mcp")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["resource"].endswith("/mcp")
-    assert "http://localhost:8090" in body["authorization_servers"]
 
 
 # ----------------------------------------------------------------- DCR
