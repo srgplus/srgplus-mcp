@@ -28,6 +28,7 @@ from .authorize import authorize_get, authorize_post
 from .dcr import register
 from .discovery import (
     authorization_server_metadata,
+    openid_configuration_metadata,
     protected_resource_metadata,
 )
 from .errors import (
@@ -68,25 +69,21 @@ def get_routes() -> list[Route]:
             endpoint=authorization_server_metadata,
             methods=["GET"],
         ),
-        # OpenAI Apps SDK MCP wizard discovery probes
-        # ``/.well-known/openid-configuration`` (and a path-suffixed variant)
-        # as part of its OAuth-config-type detection. Verified via Cloud Run
-        # access logs 2026-05-06 — the OpenAI scanner (Python aiohttp from
-        # Azure-hosted IPs) hits ``oauth-protected-resource/mcp`` →
-        # ``oauth-authorization-server`` (both 200) and then
-        # ``openid-configuration`` (was 404 before this route). The 404
-        # caused the wizard to reject the server with "OAuth discovery
-        # returned unsupported OAuth config type", blocking Save MCP details.
-        # We serve our OAuth 2.1 metadata at both shapes — the OpenAI
-        # discoverer accepts the same payload as a valid config.
+        # OpenAI Apps SDK wizard probes ``/.well-known/openid-configuration``
+        # during its OAuth-config-type detection (verified via Cloud Run
+        # logs). Aliasing this to the OAuth AS metadata returned 200 but
+        # the wizard still failed with "unsupported OAuth config type"
+        # because the OIDC parser requires ``subject_types_supported`` and
+        # ``id_token_signing_alg_values_supported``. The dedicated handler
+        # adds those fields without changing OAuth behavior.
         Route(
             "/.well-known/openid-configuration",
-            endpoint=authorization_server_metadata,
+            endpoint=openid_configuration_metadata,
             methods=["GET"],
         ),
         Route(
             "/.well-known/openid-configuration/{path:path}",
-            endpoint=authorization_server_metadata,
+            endpoint=openid_configuration_metadata,
             methods=["GET"],
         ),
         Route(
