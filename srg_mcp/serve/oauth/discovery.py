@@ -80,17 +80,16 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
 async def openid_configuration_metadata(request: Request) -> JSONResponse:
     """OIDC Discovery 1.0 — served at ``/.well-known/openid-configuration``.
 
-    OpenAI's Apps SDK MCP wizard runs strict OIDC parsing on this response.
-    OIDC Discovery 1.0 §3 requires (in addition to OAuth fields):
+    OpenAI's Apps SDK MCP wizard probes this URL during its OAuth-config-type
+    detection. A bare RFC 8414 payload returns 200 but is rejected with
+    "OAuth discovery returned unsupported OAuth config type" because the
+    OIDC parser requires ``subject_types_supported`` and
+    ``id_token_signing_alg_values_supported`` (OIDC Discovery 1.0 §3).
 
-    * ``jwks_uri`` (REQUIRED — pyoidc-style validators reject otherwise)
-    * ``subject_types_supported``
-    * ``id_token_signing_alg_values_supported``
-
-    Missing any of these triggers "OAuth discovery returned unsupported OAuth
-    config type" in the wizard. We don't issue id_tokens (OAuth 2.1 only),
-    but we serve an empty JWKS at ``/.well-known/jwks.json`` so strict
-    validators get a parseable response.
+    We don't actually issue id_tokens — this is OAuth 2.1 with header/JWT
+    access tokens — but the discoverer only checks field presence on this
+    endpoint, not response_types. Advertising ``subject_types=public`` and a
+    signing alg satisfies the type-detection without changing OAuth behavior.
     """
     issuer = _issuer()
     return JSONResponse(
@@ -100,16 +99,14 @@ async def openid_configuration_metadata(request: Request) -> JSONResponse:
             "token_endpoint": f"{issuer}/oauth/token",
             "registration_endpoint": f"{issuer}/oauth/register",
             "revocation_endpoint": f"{issuer}/oauth/revoke",
-            "jwks_uri": f"{issuer}/.well-known/jwks.json",
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
             "token_endpoint_auth_methods_supported": ["none"],
             "scopes_supported": ["mcp:full"],
             "authorization_response_iss_parameter_supported": True,
-            # OIDC Discovery 1.0 required fields. We claim subject_types and
-            # an id_token signing alg even though we don't issue id_tokens —
-            # validators only check presence on this endpoint.
+            # OIDC Discovery 1.0 required fields (rejected by OpenAI's
+            # discoverer as "unsupported config type" if absent).
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["RS256"],
             "op_logo_uri": _logo_uri(),
@@ -117,15 +114,6 @@ async def openid_configuration_metadata(request: Request) -> JSONResponse:
             "service_documentation": _DOCUMENTATION_URL,
         }
     )
-
-
-async def jwks_metadata(request: Request) -> JSONResponse:
-    """Empty JWKS — we don't sign id_tokens, so no keys to publish.
-
-    Required to be reachable so OIDC validators that resolve ``jwks_uri``
-    don't fail with a network error during OAuth-config-type detection.
-    """
-    return JSONResponse({"keys": []})
 
 
 async def protected_resource_metadata(request: Request) -> JSONResponse:
