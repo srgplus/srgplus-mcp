@@ -59,6 +59,36 @@ def get_routes() -> list[Route]:
             endpoint=authorization_server_metadata,
             methods=["GET"],
         ),
+        # Path-suffix variant per RFC 8414 §3.1 — strictly only mandated when
+        # the issuer URL itself has a path component (ours doesn't), but some
+        # MCP clients construct it anyway by mirroring RFC 9728 §3.1. Cheap
+        # defensive route; same handler.
+        Route(
+            "/.well-known/oauth-authorization-server/{path:path}",
+            endpoint=authorization_server_metadata,
+            methods=["GET"],
+        ),
+        # OpenAI Apps SDK MCP wizard discovery probes
+        # ``/.well-known/openid-configuration`` (and a path-suffixed variant)
+        # as part of its OAuth-config-type detection. Verified via Cloud Run
+        # access logs 2026-05-06 — the OpenAI scanner (Python aiohttp from
+        # Azure-hosted IPs) hits ``oauth-protected-resource/mcp`` →
+        # ``oauth-authorization-server`` (both 200) and then
+        # ``openid-configuration`` (was 404 before this route). The 404
+        # caused the wizard to reject the server with "OAuth discovery
+        # returned unsupported OAuth config type", blocking Save MCP details.
+        # We serve our OAuth 2.1 metadata at both shapes — the OpenAI
+        # discoverer accepts the same payload as a valid config.
+        Route(
+            "/.well-known/openid-configuration",
+            endpoint=authorization_server_metadata,
+            methods=["GET"],
+        ),
+        Route(
+            "/.well-known/openid-configuration/{path:path}",
+            endpoint=authorization_server_metadata,
+            methods=["GET"],
+        ),
         Route(
             "/.well-known/oauth-protected-resource",
             endpoint=protected_resource_metadata,
