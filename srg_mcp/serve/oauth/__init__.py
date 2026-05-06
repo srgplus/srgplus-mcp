@@ -28,8 +28,6 @@ from .authorize import authorize_get, authorize_post
 from .dcr import register
 from .discovery import (
     authorization_server_metadata,
-    jwks_metadata,
-    openid_configuration_metadata,
     protected_resource_metadata,
 )
 from .errors import (
@@ -70,30 +68,13 @@ def get_routes() -> list[Route]:
             endpoint=authorization_server_metadata,
             methods=["GET"],
         ),
-        # OpenAI Apps SDK wizard probes ``/.well-known/openid-configuration``
-        # during its OAuth-config-type detection (verified via Cloud Run
-        # logs). Aliasing this to the OAuth AS metadata returned 200 but
-        # the wizard still failed with "unsupported OAuth config type"
-        # because the OIDC parser requires ``subject_types_supported`` and
-        # ``id_token_signing_alg_values_supported``. The dedicated handler
-        # adds those fields without changing OAuth behavior.
-        Route(
-            "/.well-known/openid-configuration",
-            endpoint=openid_configuration_metadata,
-            methods=["GET"],
-        ),
-        Route(
-            "/.well-known/openid-configuration/{path:path}",
-            endpoint=openid_configuration_metadata,
-            methods=["GET"],
-        ),
-        # Empty JWKS — referenced by openid-configuration's ``jwks_uri``
-        # so strict OIDC validators that resolve the URL don't fail.
-        Route(
-            "/.well-known/jwks.json",
-            endpoint=jwks_metadata,
-            methods=["GET"],
-        ),
+        # NOTE: We deliberately do NOT serve /.well-known/openid-configuration.
+        # Notion and Linear (both known-working with the OpenAI Apps SDK)
+        # return 404 here, and OpenAI's parser uses the 404 to mark the
+        # config as plain OAuth 2.1 (not OIDC). Earlier PRs #21-23 served
+        # OIDC metadata here on the (incorrect) hypothesis that the 404 was
+        # the problem — it wasn't, and the 200 actually misled the parser
+        # into doing OIDC validation that we're not really an OIDC provider.
         Route(
             "/.well-known/oauth-protected-resource",
             endpoint=protected_resource_metadata,
