@@ -197,6 +197,16 @@ async def test_openid_configuration_metadata(client):
     # discoverer classifies the config as "unsupported".
     assert body["subject_types_supported"] == ["public"]
     assert "RS256" in body["id_token_signing_alg_values_supported"]
+    assert body["jwks_uri"].endswith("/.well-known/jwks.json")
+
+
+@pytest.mark.asyncio
+async def test_jwks_endpoint(client):
+    """Empty JWKS — referenced by openid-configuration's jwks_uri."""
+    r = await client.get("/.well-known/jwks.json")
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {"keys": []}
 
 
 @pytest.mark.asyncio

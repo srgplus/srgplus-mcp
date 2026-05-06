@@ -28,6 +28,7 @@ from .authorize import authorize_get, authorize_post
 from .dcr import register
 from .discovery import (
     authorization_server_metadata,
+    jwks_metadata,
     openid_configuration_metadata,
     protected_resource_metadata,
 )
@@ -84,6 +85,13 @@ def get_routes() -> list[Route]:
         Route(
             "/.well-known/openid-configuration/{path:path}",
             endpoint=openid_configuration_metadata,
+            methods=["GET"],
+        ),
+        # Empty JWKS — referenced by openid-configuration's ``jwks_uri``
+        # so strict OIDC validators that resolve the URL don't fail.
+        Route(
+            "/.well-known/jwks.json",
+            endpoint=jwks_metadata,
             methods=["GET"],
         ),
         Route(
