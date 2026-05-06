@@ -77,6 +77,45 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
     )
 
 
+async def openid_configuration_metadata(request: Request) -> JSONResponse:
+    """OIDC Discovery 1.0 — served at ``/.well-known/openid-configuration``.
+
+    OpenAI's Apps SDK MCP wizard probes this URL during its OAuth-config-type
+    detection. A bare RFC 8414 payload returns 200 but is rejected with
+    "OAuth discovery returned unsupported OAuth config type" because the
+    OIDC parser requires ``subject_types_supported`` and
+    ``id_token_signing_alg_values_supported`` (OIDC Discovery 1.0 §3).
+
+    We don't actually issue id_tokens — this is OAuth 2.1 with header/JWT
+    access tokens — but the discoverer only checks field presence on this
+    endpoint, not response_types. Advertising ``subject_types=public`` and a
+    signing alg satisfies the type-detection without changing OAuth behavior.
+    """
+    issuer = _issuer()
+    return JSONResponse(
+        {
+            "issuer": issuer,
+            "authorization_endpoint": f"{issuer}/oauth/authorize",
+            "token_endpoint": f"{issuer}/oauth/token",
+            "registration_endpoint": f"{issuer}/oauth/register",
+            "revocation_endpoint": f"{issuer}/oauth/revoke",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+            "code_challenge_methods_supported": ["S256"],
+            "token_endpoint_auth_methods_supported": ["none"],
+            "scopes_supported": ["mcp:full"],
+            "authorization_response_iss_parameter_supported": True,
+            # OIDC Discovery 1.0 required fields (rejected by OpenAI's
+            # discoverer as "unsupported config type" if absent).
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+            "op_logo_uri": _logo_uri(),
+            "logo_uri": _logo_uri(),
+            "service_documentation": _DOCUMENTATION_URL,
+        }
+    )
+
+
 async def protected_resource_metadata(request: Request) -> JSONResponse:
     """RFC 9728 — Protected Resource Metadata.
 
