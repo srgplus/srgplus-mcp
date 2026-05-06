@@ -56,6 +56,11 @@ async def authorization_server_metadata(request: Request) -> JSONResponse:
             "registration_endpoint": f"{issuer}/oauth/register",
             "revocation_endpoint": f"{issuer}/oauth/revoke",
             "response_types_supported": ["code"],
+            # RFC 8414 §2 — both Notion and Linear (known-working with the
+            # OpenAI Apps SDK MCP wizard) advertise ``response_modes_supported``.
+            # Without it the wizard's parser rejects the config as
+            # "unsupported OAuth config type". 2026-05-06.
+            "response_modes_supported": ["query"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
             "token_endpoint_auth_methods_supported": ["none"],
@@ -102,6 +107,7 @@ async def openid_configuration_metadata(request: Request) -> JSONResponse:
             "revocation_endpoint": f"{issuer}/oauth/revoke",
             "jwks_uri": f"{issuer}/.well-known/jwks.json",
             "response_types_supported": ["code"],
+            "response_modes_supported": ["query"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
             "token_endpoint_auth_methods_supported": ["none"],
