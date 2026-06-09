@@ -193,7 +193,9 @@ hosted HTTP (`X-API-Key` header).
 `list_contents` · `get_content` · `get_content_v2` · `create_content` · `update_content` · `move_content` · `search_contents` · `add_content_to_category` · `add_content_to_categories` · `remove_content_from_categories` · `get_category_references` · `create_content_section` · `update_content_section` · `delete_content_section` · `add_subcontent` · `get_subcontent` · `move_subcontent` · `delete_subcontent` · `patch_content_progression` · `get_progression_stats`
 
 ### Assets
-`list_assets` · `get_asset` · `search_assets` · `create_image_asset` · `create_video_asset` · `create_file_asset` · `create_media_asset` · `create_embed_asset` · `update_asset` · `patch_media_progression`
+`upload_asset` · `list_assets` · `get_asset` · `search_assets` · `create_embed_asset` · `update_asset` · `patch_media_progression`
+
+> `upload_asset` creates an asset and uploads its bytes in one call (from a `source_url` or `base64_content`) — use it for any file, image, or video. The older `create_image_asset` / `create_video_asset` / `create_file_asset` / `create_media_asset` tools only register an empty record and are deprecated.
 
 ### Users & Permissions
 `get_user` · `check_user_exists_by_email` · `check_user_exists_by_phone` · `get_workspace_users` · `give_permission` · `delete_permission` · `can_read` · `can_edit` · `can_archive` · `can_create_child` · `can_manage_permissions` · `is_member` · `get_permission_targets` · `list_permission_groups` · `get_permission_group` · `create_permission_group` · `update_permission_group` · `delete_permission_group` · `add_users_to_permission_group` · `remove_user_from_permission_group`
