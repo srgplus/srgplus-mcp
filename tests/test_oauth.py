@@ -172,9 +172,14 @@ async def test_protected_resource_metadata(client):
     r = await client.get("/.well-known/oauth-protected-resource")
     assert r.status_code == 200
     body = r.json()
-    assert body["resource"].endswith("/mcp")
+    # The un-suffixed doc is the ROOT resource (the presentable connector
+    # address); /mcp keeps its identity in the path-suffixed doc.
+    assert body["resource"] == "http://localhost:8090"
     assert "http://localhost:8090" in body["authorization_servers"]
     assert body["bearer_methods_supported"] == ["header"]
+
+    suffixed = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+    assert suffixed["resource"].endswith("/mcp")
 
 
 # ----------------------------------------------------------------- DCR

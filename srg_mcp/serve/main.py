@@ -446,7 +446,7 @@ _ROOT_INDEX_HTML = """<!doctype html>
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#222;">
   <h1>SRG+ MCP</h1>
   <p>Hosted MCP endpoint for the <a href="https://srgplus.com">SRG+</a> platform.</p>
-  <p>Connect any MCP-aware AI agent (Claude, Cursor, Cline, ChatGPT) to <code>https://mcp.srgplus.com/mcp</code>.</p>
+  <p>Connect any MCP-aware AI agent (Claude, Cursor, Cline, ChatGPT) to <code>https://mcp.srgplus.com</code>.</p>
   <p>Source &amp; docs: <a href="https://github.com/srgplus/srgplus-mcp">github.com/srgplus/srgplus-mcp</a></p>
 </body>
 </html>
@@ -543,7 +543,12 @@ _CORS_EXPOSE_HEADERS = ["mcp-session-id", "www-authenticate"]
 
 app = Starlette(
     routes=[
+        # The presentable connector address: https://mcp.srgplus.com — POSTs
+        # carry the MCP protocol (core profile), while browser GETs keep the
+        # branding page. Starlette routes match on path AND method, so the
+        # two coexist.
         Route("/", endpoint=root_index, methods=["GET"]),
+        Route("/", endpoint=core_mcp_endpoint, methods=["POST", "DELETE"]),
         Route("/health", endpoint=health, methods=["GET"]),
         Route(
             "/mcp",
