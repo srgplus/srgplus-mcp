@@ -91,7 +91,17 @@ async def protected_resource_metadata(request: Request) -> JSONResponse:
     """
     issuer = _issuer()
     suffix = (request.path_params.get("path") or "").strip("/")
-    resource = issuer + "/mcp/core" if suffix == "mcp/core" else _resource_uri()
+    if suffix == "mcp/core":
+        # Explicit core-profile path keeps its own identity.
+        resource = issuer + "/mcp/core"
+    elif suffix == "":
+        # Un-suffixed doc = the ROOT resource (https://mcp.srgplus.com — the
+        # presentable connector address, serving the core profile). Clients
+        # connected to /mcp fetch the path-suffixed doc below, so the legacy
+        # shape they verified against is untouched.
+        resource = issuer
+    else:
+        resource = _resource_uri()
     return JSONResponse(
         {
             "resource": resource,
