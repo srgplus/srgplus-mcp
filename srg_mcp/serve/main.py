@@ -88,9 +88,15 @@ import srg_mcp.users  # noqa: F401, E402
 import srg_mcp.workspaces  # noqa: F401, E402
 
 from srg_mcp.serve import oauth  # noqa: E402
+from srg_mcp.serve._tool_errors import install_tool_error_wrapper  # noqa: E402
 
 
 logger = logging.getLogger("srgplus-mcp-serve")
+
+# Every tool failure becomes one structured WARNING log line + one concise
+# client-facing message (see _tool_errors.py). Must run after the tool-module
+# imports above so all @mcp.tool registrations exist.
+install_tool_error_wrapper(mcp)
 
 
 # Streamable HTTP session manager wrapping the FastMCP underlying server.
@@ -113,6 +119,20 @@ def _issuer() -> str:
     return os.environ.get("OAUTH_ISSUER", "https://mcp.srgplus.com").rstrip("/")
 
 
+# The three secrets that keep OAuth tokens valid across restarts/deploys.
+# When any is missing the server generates ephemeral per-process keys (see
+# oauth/jwt_codec.py) and EVERY restart silently disconnects every connector.
+_OAUTH_KEY_ENV_VARS = (
+    "OAUTH_TOKEN_SIGNING_KEY",
+    "OAUTH_API_KEY_ENCRYPTION_KEY",
+    "OAUTH_CLIENT_REGISTRATION_KEY",
+)
+
+
+def _oauth_keys_persistent() -> bool:
+    return all(os.environ.get(name, "").strip() for name in _OAUTH_KEY_ENV_VARS)
+
+
 async def health(request: Request) -> JSONResponse:
     return JSONResponse(
         {
@@ -122,6 +142,10 @@ async def health(request: Request) -> JSONResponse:
             "transport": "streamable-http",
             "tool_count": len(await mcp.list_tools()),
             "oauth": True,
+            # false = OAuth secrets are ephemeral and every deploy/restart
+            # invalidates all issued tokens (connectors "fall off"). Anyone
+            # can verify the fix with: curl https://mcp.srgplus.com/health
+            "oauth_keys_persistent": _oauth_keys_persistent(),
         }
     )
 
@@ -204,7 +228,20 @@ class _MCPEndpoint:
             else:
                 try:
                     api_key = oauth.verify_access_token(bearer)
-                except oauth.OAuthError:
+                except oauth.OAuthError as exc:
+                    # The client gets a uniform 401 (no oracle), but WE need
+                    # the real reason in the logs — it is the difference
+                    # between "token expired, refresh will handle it" and
+                    # "signing/encryption keys changed (restart without
+                    # persistent OAUTH_* secrets), every connector just died".
+                    cause = exc.__cause__
+                    logger.warning(
+                        "mcp.auth oauth token rejected: %s%s",
+                        exc.description,
+                        f" (cause: {type(cause).__name__}: {cause})"
+                        if cause
+                        else "",
+                    )
                     api_key = None
 
         if not api_key:
