@@ -89,21 +89,31 @@ import srg_mcp.workspaces  # noqa: F401, E402
 
 from srg_mcp.serve import oauth  # noqa: E402
 from srg_mcp.serve._tool_errors import install_tool_error_wrapper  # noqa: E402
+from srg_mcp.serve.profiles import build_core_mcp  # noqa: E402
 
 
 logger = logging.getLogger("srgplus-mcp-serve")
 
 # Every tool failure becomes one structured WARNING log line + one concise
 # client-facing message (see _tool_errors.py). Must run after the tool-module
-# imports above so all @mcp.tool registrations exist.
+# imports above so all @mcp.tool registrations exist — and before the core
+# profile is built, so both surfaces share the wrapped functions.
 install_tool_error_wrapper(mcp)
 
+# Curated ~10-tool profile served at /mcp/core; /mcp keeps the full set.
+core_mcp = build_core_mcp(mcp)
 
-# Streamable HTTP session manager wrapping the FastMCP underlying server.
+
+# Streamable HTTP session managers wrapping the FastMCP underlying servers.
 # stateless=True + json_response=True keeps each request self-contained — no
 # server-side session state, which fits a multi-tenant Cloud Run deploy.
 _session_manager = StreamableHTTPSessionManager(
     app=mcp._mcp_server,
+    stateless=True,
+    json_response=True,
+)
+_core_session_manager = StreamableHTTPSessionManager(
+    app=core_mcp._mcp_server,
     stateless=True,
     json_response=True,
 )
@@ -141,6 +151,7 @@ async def health(request: Request) -> JSONResponse:
             "version": _SERVER_VERSION,
             "transport": "streamable-http",
             "tool_count": len(await mcp.list_tools()),
+            "core_tool_count": len(await core_mcp.list_tools()),
             "oauth": True,
             # false = OAuth secrets are ephemeral and every deploy/restart
             # invalidates all issued tokens (connectors "fall off"). Anyone
@@ -203,7 +214,13 @@ class _MCPEndpoint:
 
     On 401 we include a ``WWW-Authenticate`` header pointing at our AS
     metadata so MCP clients that follow the discovery spec can find us.
+
+    One instance per tool profile — the session manager passed in decides
+    whether the request sees the full tool set (/mcp) or core (/mcp/core).
     """
+
+    def __init__(self, session_manager: StreamableHTTPSessionManager) -> None:
+        self._session_manager = session_manager
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
@@ -279,12 +296,13 @@ class _MCPEndpoint:
 
         token = _srg_mcp_client.set_current_api_key(api_key)
         try:
-            await _session_manager.handle_request(scope, receive, send)
+            await self._session_manager.handle_request(scope, receive, send)
         finally:
             _srg_mcp_client.reset_current_api_key(token)
 
 
-mcp_endpoint = _MCPEndpoint()
+mcp_endpoint = _MCPEndpoint(_session_manager)
+core_mcp_endpoint = _MCPEndpoint(_core_session_manager)
 
 
 # ----------------------------------------------------------------- Static assets
@@ -501,7 +519,7 @@ async def manifest(request: Request) -> Response:
 
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
-    async with _session_manager.run():
+    async with _session_manager.run(), _core_session_manager.run():
         yield
 
 
@@ -530,6 +548,13 @@ app = Starlette(
         Route(
             "/mcp",
             endpoint=mcp_endpoint,
+            methods=["GET", "POST", "DELETE"],
+        ),
+        # Curated daily-work profile (see serve/profiles.py). Same auth, same
+        # OAuth tokens (audience is host-fixed), smaller tool surface.
+        Route(
+            "/mcp/core",
+            endpoint=core_mcp_endpoint,
             methods=["GET", "POST", "DELETE"],
         ),
         Route(

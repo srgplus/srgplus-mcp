@@ -82,11 +82,19 @@ async def protected_resource_metadata(request: Request) -> JSONResponse:
 
     Tells clients which AS issues tokens for this MCP endpoint. Claude.ai's
     web wizard fetches this first to bootstrap the OAuth dance.
+
+    RFC 9728 §3.3: the advertised ``resource`` must match the endpoint the
+    client connects to. The core profile gets its own identity at
+    ``/mcp/core``; every other suffix keeps the legacy default — the exact
+    claude.ai-verified shape for ``/mcp`` (see the PR #29/#30 reverts before
+    changing anything here).
     """
     issuer = _issuer()
+    suffix = (request.path_params.get("path") or "").strip("/")
+    resource = issuer + "/mcp/core" if suffix == "mcp/core" else _resource_uri()
     return JSONResponse(
         {
-            "resource": _resource_uri(),
+            "resource": resource,
             "authorization_servers": [issuer],
             "scopes_supported": ["mcp:full"],
             "bearer_methods_supported": ["header"],
