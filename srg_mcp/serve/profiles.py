@@ -50,7 +50,9 @@ def build_core_mcp(full_mcp: FastMCP) -> FastMCP:
     Raises at startup (not at first request) when a core name is missing, so
     a tool rename that forgets this list fails loudly in CI/deploy.
     """
-    core = FastMCP("SRG+ Core")
+    # Carry the same server-level guidance onto the core surface so /mcp/core
+    # clients get the SRG+ pitfalls too (the instructions string is shared).
+    core = FastMCP("SRG+ Core", instructions=full_mcp.instructions)
     full_tools = full_mcp._tool_manager._tools
     missing = [name for name in CORE_TOOL_NAMES if name not in full_tools]
     if missing:
