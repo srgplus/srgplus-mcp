@@ -158,8 +158,22 @@ def create_content(
     main_asset_id: ID of the primary playable asset
     url: optional external URL to associate with the content
     cover_image: local path or http(s):// URL of the cover image (auto-upload)
-    context: additional context widget objects
     categories: category assignment objects
+
+    context: the body — an ordered list of widget objects. Each widget MUST
+    carry a "$type" discriminator (literal key, with the dollar sign). Shapes:
+      • Text (markdown body):
+        {"$type": "Text", "content": "<markdown, 1-5000 chars>", "title": "<optional>"}
+      • LinkList:
+        {"$type": "LinkList", "title": "<optional>", "links": [
+            {"$type": "CustomLink", "title": "<required, 1-100, unique in list>", "url": "https://..."},
+            {"$type": "KnownLink",  "title": "<required>", "url": "https://..."}
+        ]}
+        (both link types use "title" + "url"; NOT "label"/"type". Max 20 links.)
+      • Media: {"$type": "Media", "asset_id": "<asset id>", "title": "<optional>", "autoplay": false}
+      • HubProfile: {"$type": "HubProfile", "hub_profile_id": "<id>", "title": "<optional>"}
+      • ContentWidget: {"$type": "ContentWidget", "content_id": "<id>", "title": "<optional>"}
+    A single bad widget rejects the WHOLE call with 400. Widget title (when set) is 1-150 chars.
     """
     result = get_client().contents.create(
         name=name,
@@ -206,11 +220,25 @@ def update_content(
     channels: list of channel IDs (replaces existing placement)
     main_asset_id: ID of the primary playable asset
     url: external URL to associate with the content
-    hub_profile_id: required if the content belongs to a specific profile
+    hub_profile_id: the owning hub profile. Optional — when omitted it is
+        resolved automatically from the content, so you normally do not pass it.
     cover_image: local path or http(s):// URL of the cover image (auto-upload)
-    context: context widget objects (replaces existing)
-    categories: category assignment objects (replaces existing)
+    categories: category assignment objects (REPLACES existing — to append,
+        read the content first and send the full list back)
+
+    context: the body — REPLACES the existing widget list. Same widget shapes
+    as create_content: each item needs a "$type" ("Text" with "content";
+    "LinkList" with "links" of {"$type":"CustomLink"|"KnownLink","title","url"};
+    "Media"/"HubProfile"/"ContentWidget"). To append to the current body, read
+    it first (get_content_v2) and send the existing widgets plus the new ones.
     """
+    # The PUT route needs the owning hub profile. Resolve it from the content
+    # when the caller didn't pass it, so updates don't fail with a bare 400.
+    if hub_profile_id is None:
+        hub_profile_id = get_client().contents.get_v2(
+            content_id, workspace_id=workspace_id
+        ).hub_profile_id
+
     result = get_client().contents.update(
         content_id,
         name=name,
