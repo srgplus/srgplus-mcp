@@ -23,12 +23,9 @@ EXPECTED_CORE = {
     "archive_content",
     "restore_content",
     "archive_channel",
-    "delete_channel",
     "archive_category",
-    "delete_category",
     "archive_hub_profile",
     "restore_hub_profile",
-    "delete_hub_profile",
 }
 
 
@@ -53,9 +50,14 @@ async def test_full_mcp_unchanged_and_superset():
     names = {t.name for t in await mcp.list_tools()}
     assert len(names) >= 90  # full surface still loaded
     assert EXPECTED_CORE <= names
-    # admin tools stay OFF the curated core but ON the full one
-    assert "delete_permission_group" in names
-    assert "delete_permission_group" not in EXPECTED_CORE
+    # Hard-delete tools exist on the full surface but are intentionally kept
+    # OUT of the agent core profile (archive-only); deletes are manual-only.
+    for hard_delete in ("delete_channel", "delete_category", "delete_hub_profile",
+                        "delete_permission_group"):
+        assert hard_delete in names, f"{hard_delete} should stay on full /mcp"
+        assert hard_delete not in EXPECTED_CORE, f"{hard_delete} must NOT be in core"
+    # Archive stays available in core (reversible).
+    assert {"archive_content", "archive_channel", "archive_hub_profile"} <= EXPECTED_CORE
 
 
 def test_core_tools_share_wrapped_functions():

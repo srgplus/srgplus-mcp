@@ -37,16 +37,15 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "update_content",
     "upload_asset",
     "add_content_to_categories",
-    # Lifecycle (archive is reversible; delete is permanent — see tool docs).
+    # Lifecycle — ARCHIVE ONLY in the core profile (reversible). Hard delete is
+    # intentionally kept OUT of the agent connector for now (manual-only in the
+    # app); the delete_* tools still exist on the full /mcp surface for admin use.
     "archive_content",
     "restore_content",
     "archive_channel",
-    "delete_channel",
     "archive_category",
-    "delete_category",
     "archive_hub_profile",
     "restore_hub_profile",
-    "delete_hub_profile",
 )
 
 
