@@ -66,6 +66,8 @@ def search_contents(
     """Search content items in a hub profile by keyword.
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
+    search: REQUIRED non-empty keyword. An empty/blank string is rejected (400);
+        there is no "list all" via search — to browse, walk channels/categories.
     types: ["Content"], ["Collection"], or None for both (default)
     """
     items = get_client().contents.search(
@@ -154,7 +156,10 @@ def create_content(
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Preview" (default), "Private", or "Public"
-    channels: list of channel IDs to place the content in
+    channels: list of channel IDs. NOTE: a channel placement needs a category,
+        so passing channels alone here often does NOT stick (saved channels:[]).
+        To reliably place content, call add_content_to_categories(content_id,
+        channel_id, category_ids=[...]) after create.
     main_asset_id: ID of the primary playable asset
     url: optional external URL to associate with the content
     cover_image: http(s):// URL (or local path) of the cover; the URL PATH must

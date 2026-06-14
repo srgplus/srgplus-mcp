@@ -30,6 +30,8 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
    `get_channel(channel_id, workspace_id)` — the channel payload carries its
    categories WITH their ids. Category ids for attaching content come from here.
 4. `search_contents(hub_profile_id, search, workspace_id)` — fuzzy, hub-wide.
+   `search` must be a NON-EMPTY keyword (a blank query is rejected with 400);
+   there is no search-all, so to browse use list_channels/get_channel.
 5. `get_content(id, workspace_id)` / `get_content_v2(id, workspace_id)` — v2 is
    the reliable read for channel/category membership and for Private channels.
 
@@ -39,8 +41,10 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
    Optional `cover_image` must be an http(s) URL whose PATH ends in an image
    extension (.jpg/.png/...): `.../cover.jpg?sig=…` works (query is ignored),
    but an extension-less URL (e.g. placehold.co/600x400) is rejected (400).
-2. Place it: pass `channels=[channel_id]` at create, or afterwards
-   `add_content_to_categories(content_id, channel_id, category_ids=[...], workspace_id)`.
+2. Place it with `add_content_to_categories(content_id, channel_id,
+   category_ids=[...], workspace_id)`. A placement needs a CATEGORY, so passing
+   `channels=[channel_id]` alone at create often does NOT stick (saved
+   channels:[]) — use add_content_to_categories to be sure.
 3. `create_content` returns a TRUNCATED echo of the body — verify the real
    persisted widgets with `get_content_v2`.
 
