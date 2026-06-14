@@ -14,14 +14,28 @@ from mcp.types import ToolAnnotations
 def list_workspaces() -> list[dict]:
     """List all workspaces accessible with the current API key(s).
 
-    When multiple API keys were provided during OAuth, this returns all workspaces
-    across all keys. Use the workspace_id from this list to target a specific
-    workspace in any other tool that requires a workspace_id parameter.
+    Returns a SLIM row per workspace — id, name, hub_profile_count — which is
+    all you need to pick a workspace_id for other tools. For full details
+    (seats, subscription, hub profiles) call get_workspace(workspace_id).
+
+    A user-level key (srgplus_u_) returns every workspace it can reach; multiple
+    keys are merged. The list comes from the single bulk call made when the key
+    was resolved, so it is one response, not one request per workspace.
     """
     client = get_client()
+    overview = getattr(client, "workspaces_overview", None)
+    if overview is None:  # SDK < 0.2.4 fallback: full fetch per workspace
+        return [
+            client.workspaces.get(ws_id).model_dump(mode="json")
+            for ws_id in client.workspace_ids
+        ]
     return [
-        client.workspaces.get(ws_id).model_dump(mode="json")
-        for ws_id in client.workspace_ids
+        {
+            "id": str(ws.get("id")),
+            "name": ws.get("name"),
+            "hub_profile_count": len(ws.get("hubProfiles") or []),
+        }
+        for ws in overview
     ]
 
 
