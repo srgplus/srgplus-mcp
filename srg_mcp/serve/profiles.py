@@ -24,6 +24,7 @@ from mcp.server.fastmcp import FastMCP
 logger = logging.getLogger("srgplus-mcp-serve.profiles")
 
 CORE_TOOL_NAMES: tuple[str, ...] = (
+    # Read / navigate
     "list_workspaces",
     "list_hub_profiles",
     "list_channels",
@@ -31,10 +32,21 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "search_contents",
     "get_content",
     "get_content_v2",
+    # Create / edit content
     "create_content",
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    # Lifecycle (archive is reversible; delete is permanent — see tool docs).
+    # archive_content / restore_content are added once the backend endpoint
+    # + SDK methods ship (Part 2).
+    "archive_channel",
+    "delete_channel",
+    "archive_category",
+    "delete_category",
+    "archive_hub_profile",
+    "restore_hub_profile",
+    "delete_hub_profile",
 )
 
 

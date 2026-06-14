@@ -20,14 +20,20 @@ EXPECTED_CORE = {
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    "archive_channel",
+    "delete_channel",
+    "archive_category",
+    "delete_category",
+    "archive_hub_profile",
+    "restore_hub_profile",
+    "delete_hub_profile",
 }
 
 
-def test_core_list_is_exactly_the_curated_eleven():
+def test_core_list_is_exactly_the_curated_set():
     # The deliberate, reviewed surface — a tool added/removed from the core
     # profile must show up as a diff in THIS test, not just in profiles.py.
     assert set(CORE_TOOL_NAMES) == EXPECTED_CORE
-    assert len(CORE_TOOL_NAMES) == 11
 
 
 @pytest.mark.asyncio
@@ -45,9 +51,9 @@ async def test_full_mcp_unchanged_and_superset():
     names = {t.name for t in await mcp.list_tools()}
     assert len(names) >= 90  # full surface still loaded
     assert EXPECTED_CORE <= names
-    # destructive/admin tools stay OFF the core profile but ON the full one
-    assert "delete_channel" in names
-    assert "delete_channel" not in EXPECTED_CORE
+    # admin tools stay OFF the curated core but ON the full one
+    assert "delete_permission_group" in names
+    assert "delete_permission_group" not in EXPECTED_CORE
 
 
 def test_core_tools_share_wrapped_functions():
