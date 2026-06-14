@@ -20,6 +20,8 @@ EXPECTED_CORE = {
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    "archive_content",
+    "restore_content",
     "archive_channel",
     "delete_channel",
     "archive_category",

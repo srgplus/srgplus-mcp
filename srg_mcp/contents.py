@@ -256,6 +256,56 @@ def update_content(
     return result.model_dump(mode="json")
 
 
+def _post_content_lifecycle(content_id: str, workspace_id: str, action: str) -> None:
+    """POST /api/v1/contents/{id}/{archive|restore}.
+
+    Prefers the SDK method when the installed srgplus exposes it; falls back
+    to the authenticated HTTP client so the tool works before the SDK bump.
+    """
+    contents = get_client().contents
+    method = getattr(contents, action, None)
+    if callable(method):
+        method(content_id, workspace_id=workspace_id)
+    else:  # pragma: no cover - exercised only on older SDK builds
+        contents._get_http(workspace_id).post(f"/api/v1/contents/{content_id}/{action}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Archive content",
+        readOnlyHint=False,
+        destructiveHint=True,
+        openWorldHint=True,
+    )
+)
+def archive_content(content_id: str, workspace_id: str) -> str:
+    """Archive a content item (hidden from listings, fully reversible).
+
+    The platform has no hard delete for content — archiving is how you remove
+    a content item from view; use restore_content to bring it back.
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
+    _post_content_lifecycle(content_id, workspace_id, "archive")
+    return "archived"
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Restore content",
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
+def restore_content(content_id: str, workspace_id: str) -> str:
+    """Restore a previously archived content item.
+
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
+    _post_content_lifecycle(content_id, workspace_id, "restore")
+    return "restored"
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         title="Add content to categories",

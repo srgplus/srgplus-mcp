@@ -38,8 +38,8 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "upload_asset",
     "add_content_to_categories",
     # Lifecycle (archive is reversible; delete is permanent — see tool docs).
-    # archive_content / restore_content are added once the backend endpoint
-    # + SDK methods ship (Part 2).
+    "archive_content",
+    "restore_content",
     "archive_channel",
     "delete_channel",
     "archive_category",
