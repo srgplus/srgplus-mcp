@@ -7,6 +7,7 @@ import srg_mcp.assets  # noqa: F401
 import srg_mcp.users  # noqa: F401
 import srg_mcp.workspaces  # noqa: F401
 import srg_mcp.permission_groups  # noqa: F401
+import srg_mcp.guide  # noqa: F401
 
 
 def main() -> None:

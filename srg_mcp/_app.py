@@ -15,6 +15,10 @@ One key may span several workspaces; list them and pick the right one per call.
 Typical flow: list_workspaces → list_hub_profiles → list_channels → get_channel
 (returns the channel's categories WITH their ids) → search_contents / get_content.
 
+For the FULL how-to (recipes, exact widget shapes, safe-update rules, pitfalls)
+call `get_srgplus_guide()` — it ships with this connector, so you never need a
+separate skill or plugin installed. Pull it before authoring content if unsure.
+
 Content body = the `context` list of widgets. Every widget needs a "$type": "Text"
 (field `content`, markdown), "LinkList" (field `links`, each a {"$type":"CustomLink"|"KnownLink",
 "title","url"} — both link kinds use title+url), "Media" (field `assetId`), "HubProfile"

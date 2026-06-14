@@ -86,6 +86,7 @@ import srg_mcp.hub_profiles  # noqa: F401, E402
 import srg_mcp.permission_groups  # noqa: F401, E402
 import srg_mcp.users  # noqa: F401, E402
 import srg_mcp.workspaces  # noqa: F401, E402
+import srg_mcp.guide  # noqa: F401, E402
 
 from srg_mcp.serve import oauth  # noqa: E402
 from srg_mcp.serve._tool_errors import install_tool_error_wrapper  # noqa: E402

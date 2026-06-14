@@ -9,6 +9,7 @@ from srg_mcp.serve.profiles import CORE_TOOL_NAMES, build_core_mcp
 
 
 EXPECTED_CORE = {
+    "get_srgplus_guide",
     "list_workspaces",
     "list_hub_profiles",
     "list_channels",

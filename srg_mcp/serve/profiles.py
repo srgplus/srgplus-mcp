@@ -24,6 +24,9 @@ from mcp.server.fastmcp import FastMCP
 logger = logging.getLogger("srgplus-mcp-serve.profiles")
 
 CORE_TOOL_NAMES: tuple[str, ...] = (
+    # Self-help — the full how-to guide ships with the connector (no separate
+    # skill install needed); agents pull it on demand.
+    "get_srgplus_guide",
     # Read / navigate
     "list_workspaces",
     "list_hub_profiles",
