@@ -26,7 +26,10 @@ dependencies = [
     # private `mcp._mcp_server` attribute in serve/main.py, which any major
     # version bump could break without warning.
     "mcp[cli]>=1.0,<2.0",
-    "srgplus>=0.2.2",
+    # 0.2.3: a user-level key (srgplus_u_) now resolves to ALL its workspaces,
+    # not just the first — required for the hosted connector to surface more
+    # than one workspace from a single personal key.
+    "srgplus>=0.2.3",
 ]
 
 [project.optional-dependencies]
