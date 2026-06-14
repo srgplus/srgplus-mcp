@@ -161,19 +161,27 @@ def create_content(
     categories: category assignment objects
 
     context: the body — an ordered list of widget objects. Each widget MUST
-    carry a "$type" discriminator (literal key, with the dollar sign). Shapes:
+    carry a "$type" discriminator (literal key, with the dollar sign). Keys are
+    camelCase: the backend rejects snake_case for multi-word fields (assetId,
+    hubProfileIds, referenceIds) as a silent 400, so never send asset_id etc.
+    Shapes:
       • Text (markdown body):
-        {"$type": "Text", "content": "<markdown, 1-5000 chars>", "title": "<optional>"}
+        {"$type": "Text", "content": "<markdown, required>", "title": "<optional>"}
       • LinkList:
         {"$type": "LinkList", "title": "<optional>", "links": [
-            {"$type": "CustomLink", "title": "<required, 1-100, unique in list>", "url": "https://..."},
+            {"$type": "CustomLink", "title": "<required, unique in list>", "url": "https://...", "extension": "<optional image ext>"},
             {"$type": "KnownLink",  "title": "<required>", "url": "https://..."}
         ]}
         (both link types use "title" + "url"; NOT "label"/"type". Max 20 links.)
-      • Media: {"$type": "Media", "asset_id": "<asset id>", "title": "<optional>", "autoplay": false}
-      • HubProfile: {"$type": "HubProfile", "hub_profile_id": "<id>", "title": "<optional>"}
-      • ContentWidget: {"$type": "ContentWidget", "content_id": "<id>", "title": "<optional>"}
-    A single bad widget rejects the WHOLE call with 400. Widget title (when set) is 1-150 chars.
+      • Media: {"$type": "Media", "assetId": "<asset id, required>", "autoplay": false, "title": "<optional>"}
+        (key is assetId — upload the file with upload_asset first to get the id)
+      • HubProfile: {"$type": "HubProfile", "hubProfileIds": ["<hub id>", ...], "title": "<optional>"}
+        (hubProfileIds is a REQUIRED array, even for a single hub)
+      • ContentWidget: {"$type": "ContentWidget", "referenceType": "Content",
+            "referenceIds": [{"$type": "Content", "id": "<content id>"}], "title": "<optional>"}
+        (each reference is {"$type": "Content"|"Asset", "id": "..."}; referenceType matches the kind)
+    A single bad widget rejects the WHOLE call with 400 (the error now names the
+    rejected field). Widget title (when set) is 1-150 chars.
     """
     result = get_client().contents.create(
         name=name,
@@ -227,10 +235,11 @@ def update_content(
         read the content first and send the full list back)
 
     context: the body — REPLACES the existing widget list. Same widget shapes
-    as create_content: each item needs a "$type" ("Text" with "content";
-    "LinkList" with "links" of {"$type":"CustomLink"|"KnownLink","title","url"};
-    "Media"/"HubProfile"/"ContentWidget"). To append to the current body, read
-    it first (get_content_v2) and send the existing widgets plus the new ones.
+    as create_content, camelCase keys: "Text"{content}; "LinkList"{links:[{$type,
+    title,url}]}; "Media"{assetId,autoplay}; "HubProfile"{hubProfileIds:[...]};
+    "ContentWidget"{referenceType,referenceIds:[{$type,id}]}. To append to the
+    current body, read it first (get_content_v2) and send the existing widgets
+    plus the new ones.
     """
     # The PUT route needs the owning hub profile. Resolve it from the content
     # when the caller didn't pass it, so updates don't fail with a bare 400.

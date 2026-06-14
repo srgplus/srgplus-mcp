@@ -17,9 +17,11 @@ Typical flow: list_workspaces → list_hub_profiles → list_channels → get_ch
 
 Content body = the `context` list of widgets. Every widget needs a "$type": "Text"
 (field `content`, markdown), "LinkList" (field `links`, each a {"$type":"CustomLink"|"KnownLink",
-"title","url"} — both link kinds use title+url), "Media", "HubProfile", or "ContentWidget".
-One malformed widget rejects the whole write with 400. See the create_content/update_content
-tool docs for the full shapes.
+"title","url"} — both link kinds use title+url), "Media" (field `assetId`), "HubProfile"
+(field `hubProfileIds`, an array), or "ContentWidget" (fields `referenceType` +
+`referenceIds`:[{"$type":"Content"|"Asset","id":..}]). Widget keys are camelCase — snake_case
+(asset_id, hub_profile_id) is silently rejected as a 400. One malformed widget rejects the whole
+write; the error names the bad field. See the create_content/update_content tool docs for full shapes.
 
 Pitfalls that cause real damage — read before writing:
 - update_content merges SCALAR fields you pass (others are preserved), but any LIST you pass
