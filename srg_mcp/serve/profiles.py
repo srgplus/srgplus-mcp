@@ -43,7 +43,9 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "archive_content",
     "restore_content",
     "archive_channel",
+    "restore_channel",
     "archive_category",
+    "restore_category",
     "archive_hub_profile",
     "restore_hub_profile",
 )

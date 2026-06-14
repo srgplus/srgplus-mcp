@@ -160,6 +160,28 @@ def archive_channel(channel_id: str, workspace_id: str) -> dict | None:
 
 @mcp.tool(
     annotations=ToolAnnotations(
+        title="Restore channel",
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
+def restore_channel(channel_id: str, workspace_id: str) -> str:
+    """Restore a previously archived channel.
+
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
+    channels = get_client().channels
+    method = getattr(channels, "restore", None)
+    if callable(method):
+        method(channel_id, workspace_id=workspace_id)
+    else:  # pragma: no cover - older SDK without the method
+        channels._get_http(workspace_id).post(f"/api/v1/channels/{channel_id}/restore")
+    return "restored"
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
         title="Delete channel",
         readOnlyHint=False,
         destructiveHint=True,
@@ -320,6 +342,34 @@ def archive_category(
     return get_client().channels.archive_category(
         channel_id, category_id, workspace_id=workspace_id
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Restore category",
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
+def restore_category(
+    channel_id: str,
+    category_id: str,
+    workspace_id: str,
+) -> str:
+    """Restore a previously archived category inside a channel.
+
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
+    channels = get_client().channels
+    method = getattr(channels, "restore_category", None)
+    if callable(method):
+        method(channel_id, category_id, workspace_id=workspace_id)
+    else:  # pragma: no cover - older SDK without the method
+        channels._get_http(workspace_id).post(
+            f"/api/v1/channels/{channel_id}/{category_id}/restore"
+        )
+    return "restored"
 
 
 @mcp.tool(
