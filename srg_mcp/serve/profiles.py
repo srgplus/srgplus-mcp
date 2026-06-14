@@ -24,6 +24,7 @@ from mcp.server.fastmcp import FastMCP
 logger = logging.getLogger("srgplus-mcp-serve.profiles")
 
 CORE_TOOL_NAMES: tuple[str, ...] = (
+    # Read / navigate
     "list_workspaces",
     "list_hub_profiles",
     "list_channels",
@@ -31,10 +32,22 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "search_contents",
     "get_content",
     "get_content_v2",
+    # Create / edit content
     "create_content",
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    # Lifecycle — ARCHIVE ONLY in the core profile (reversible). Hard delete is
+    # intentionally kept OUT of the agent connector for now (manual-only in the
+    # app); the delete_* tools still exist on the full /mcp surface for admin use.
+    "archive_content",
+    "restore_content",
+    "archive_channel",
+    "restore_channel",
+    "archive_category",
+    "restore_category",
+    "archive_hub_profile",
+    "restore_hub_profile",
 )
 
 

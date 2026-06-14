@@ -20,14 +20,21 @@ EXPECTED_CORE = {
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    "archive_content",
+    "restore_content",
+    "archive_channel",
+    "restore_channel",
+    "archive_category",
+    "restore_category",
+    "archive_hub_profile",
+    "restore_hub_profile",
 }
 
 
-def test_core_list_is_exactly_the_curated_eleven():
+def test_core_list_is_exactly_the_curated_set():
     # The deliberate, reviewed surface — a tool added/removed from the core
     # profile must show up as a diff in THIS test, not just in profiles.py.
     assert set(CORE_TOOL_NAMES) == EXPECTED_CORE
-    assert len(CORE_TOOL_NAMES) == 11
 
 
 @pytest.mark.asyncio
@@ -45,9 +52,14 @@ async def test_full_mcp_unchanged_and_superset():
     names = {t.name for t in await mcp.list_tools()}
     assert len(names) >= 90  # full surface still loaded
     assert EXPECTED_CORE <= names
-    # destructive/admin tools stay OFF the core profile but ON the full one
-    assert "delete_channel" in names
-    assert "delete_channel" not in EXPECTED_CORE
+    # Hard-delete tools exist on the full surface but are intentionally kept
+    # OUT of the agent core profile (archive-only); deletes are manual-only.
+    for hard_delete in ("delete_channel", "delete_category", "delete_hub_profile",
+                        "delete_permission_group"):
+        assert hard_delete in names, f"{hard_delete} should stay on full /mcp"
+        assert hard_delete not in EXPECTED_CORE, f"{hard_delete} must NOT be in core"
+    # Archive stays available in core (reversible).
+    assert {"archive_content", "archive_channel", "archive_hub_profile"} <= EXPECTED_CORE
 
 
 def test_core_tools_share_wrapped_functions():

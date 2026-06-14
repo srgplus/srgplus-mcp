@@ -30,10 +30,12 @@ async def test_root_post_serves_core_profile(client):
         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
     )
     assert response.status_code == 200
+    from srg_mcp.serve.profiles import CORE_TOOL_NAMES
+
     tools = {t["name"] for t in response.json()["result"]["tools"]}
-    assert len(tools) == 11
+    assert len(tools) == len(CORE_TOOL_NAMES)
     assert "list_workspaces" in tools
-    assert "delete_channel" not in tools  # full set stays on /mcp only
+    assert "delete_permission_group" not in tools  # admin tools stay on /mcp only
 
 
 @pytest.mark.asyncio
