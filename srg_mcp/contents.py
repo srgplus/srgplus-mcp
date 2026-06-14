@@ -157,7 +157,9 @@ def create_content(
     channels: list of channel IDs to place the content in
     main_asset_id: ID of the primary playable asset
     url: optional external URL to associate with the content
-    cover_image: local path or http(s):// URL of the cover image (auto-upload)
+    cover_image: http(s):// URL (or local path) of the cover; the URL PATH must
+        end in an image extension (.jpg/.png/...). Query strings are fine (signed
+        URLs work); an extension-less URL (e.g. placehold.co/600x400) returns 400.
     categories: category assignment objects
 
     context: the body — an ordered list of widget objects. Each widget MUST
@@ -173,8 +175,10 @@ def create_content(
             {"$type": "KnownLink",  "title": "<required>", "url": "https://..."}
         ]}
         (both link types use "title" + "url"; NOT "label"/"type". Max 20 links.)
-      • Media: {"$type": "Media", "assetId": "<asset id, required>", "autoplay": false, "title": "<optional>"}
-        (key is assetId — upload the file with upload_asset first to get the id)
+      • Media: {"$type": "Media", "assetId": "<existing PLAYABLE/video asset id>", "autoplay": false, "title": "<optional>"}
+        (assetId must be an EXISTING playable/video asset of the hub; an image or
+        a just-uploaded asset is NOT playable media and returns 404. No image-body
+        widget exists — use the cover, a CustomLink, or markdown in a Text widget.)
       • HubProfile: {"$type": "HubProfile", "hubProfileIds": ["<hub id>", ...], "title": "<optional>"}
         (hubProfileIds is a REQUIRED array, even for a single hub)
       • ContentWidget: {"$type": "ContentWidget", "referenceType": "Content",
@@ -230,7 +234,9 @@ def update_content(
     url: external URL to associate with the content
     hub_profile_id: the owning hub profile. Optional — when omitted it is
         resolved automatically from the content, so you normally do not pass it.
-    cover_image: local path or http(s):// URL of the cover image (auto-upload)
+    cover_image: http(s):// URL (or local path) of the cover; the URL PATH must
+        end in an image extension (.jpg/.png/...). Query strings are fine (signed
+        URLs work); an extension-less URL (e.g. placehold.co/600x400) returns 400.
     categories: category assignment objects (REPLACES existing — to append,
         read the content first and send the full list back)
 

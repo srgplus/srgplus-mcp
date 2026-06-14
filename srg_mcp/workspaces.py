@@ -14,9 +14,10 @@ from mcp.types import ToolAnnotations
 def list_workspaces() -> list[dict]:
     """List all workspaces accessible with the current API key(s).
 
-    Returns a SLIM row per workspace — id, name, hub_profile_count — which is
-    all you need to pick a workspace_id for other tools. For full details
-    (seats, subscription, hub profiles) call get_workspace(workspace_id).
+    Returns a SLIM row per workspace — id and name — which is all you need to
+    pick a workspace_id for other tools. For full details (seats, subscription,
+    hub profiles) call get_workspace(workspace_id); for a workspace's brands
+    call list_hub_profiles(workspace_id).
 
     A user-level key (srgplus_u_) returns every workspace it can reach; multiple
     keys are merged. The list comes from the single bulk call made when the key
@@ -29,12 +30,11 @@ def list_workspaces() -> list[dict]:
             client.workspaces.get(ws_id).model_dump(mode="json")
             for ws_id in client.workspace_ids
         ]
+    # Slim to id + name. The bulk /api/v1/workspaces response does NOT carry hub
+    # counts, so do not surface a (always-zero) count here — use
+    # list_hub_profiles(workspace_id) for a workspace's brands.
     return [
-        {
-            "id": str(ws.get("id")),
-            "name": ws.get("name"),
-            "hub_profile_count": len(ws.get("hubProfiles") or []),
-        }
+        {"id": str(ws.get("id")), "name": ws.get("name")}
         for ws in overview
     ]
 
