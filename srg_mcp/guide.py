@@ -36,8 +36,13 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
 ## Create and place content
 1. `create_content(name, hub_profile_id, workspace_id, privacy="Preview",
    details=..., context=[...])`. `privacy` is "Preview" | "Private" | "Public".
+   Optional `cover_image` must be an http(s) URL whose PATH ends in an image
+   extension (.jpg/.png/...): `.../cover.jpg?sig=…` works (query is ignored),
+   but an extension-less URL (e.g. placehold.co/600x400) is rejected (400).
 2. Place it: pass `channels=[channel_id]` at create, or afterwards
    `add_content_to_categories(content_id, channel_id, category_ids=[...], workspace_id)`.
+3. `create_content` returns a TRUNCATED echo of the body — verify the real
+   persisted widgets with `get_content_v2`.
 
 ## The body = `context`, an ordered list of widgets
 Every widget carries a `$type`. Keys are **camelCase** — the backend silently
@@ -49,8 +54,11 @@ A single bad widget rejects the whole write; the 400 now names the bad field.
     {"$type":"CustomLink","title":"..","url":"https://..","extension":"<optional image ext>"},
     {"$type":"KnownLink","title":"..","url":"https://.."}]}`
   (both link kinds use `title`+`url`; max 20 links)
-- Media: `{"$type":"Media","assetId":"<asset id>","autoplay":false,"title":"<optional>"}`
-  (upload the file first with `upload_asset` to get the id)
+- Media: `{"$type":"Media","assetId":"<playable asset id>","autoplay":false,"title":"<optional>"}`
+  (assetId must be an EXISTING PLAYABLE/VIDEO asset of the hub. An image, or a
+  just-uploaded asset, is NOT playable media and 404s `Media widget assets …
+  not found`. There is no image-body widget — put images in the cover, a
+  CustomLink, or markdown in a Text widget.)
 - HubProfile: `{"$type":"HubProfile","hubProfileIds":["<hub id>",...],"title":"<optional>"}`
   (`hubProfileIds` is a REQUIRED array, even for one hub)
 - ContentWidget: `{"$type":"ContentWidget","referenceType":"Content",
