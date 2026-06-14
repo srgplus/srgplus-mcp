@@ -90,7 +90,7 @@
       color: var(--muted);
       margin: 12px 0 6px;
     }
-    input[type="password"],
+    input.key-input,
     textarea.api-key-input {
       width: 100%;
       padding: 12px 14px;
@@ -105,7 +105,7 @@
       box-sizing: border-box;
       resize: vertical;
     }
-    input[type="password"]:focus,
+    input.key-input:focus,
     textarea.api-key-input:focus {
       border-color: var(--accent);
     }
@@ -159,7 +159,7 @@
       gap: 8px;
       align-items: center;
     }
-    .key-row input[type="password"] {
+    .key-row input.key-input {
       flex: 1;
       margin: 0;
     }
@@ -234,11 +234,18 @@
         <div class="key-fields" id="key-fields">
           <div class="key-row">
             <input
-              type="password"
+              type="text"
               placeholder="srgplus_..."
               autofocus
               spellcheck="false"
               autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              name="srg_key_entry"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-bwignore="true"
+              data-form-type="other"
               class="key-input"
             >
           </div>
@@ -265,10 +272,16 @@
           row.className = 'key-row';
 
           const inp = document.createElement('input');
-          inp.type = 'password';
+          inp.type = 'text';
           inp.placeholder = 'srgplus_...';
           inp.spellcheck = false;
           inp.autocomplete = 'off';
+          inp.setAttribute('autocapitalize', 'off');
+          inp.setAttribute('autocorrect', 'off');
+          inp.setAttribute('data-1p-ignore', 'true');
+          inp.setAttribute('data-lpignore', 'true');
+          inp.setAttribute('data-bwignore', 'true');
+          inp.setAttribute('data-form-type', 'other');
           inp.className = 'key-input';
           row.appendChild(inp);
 
