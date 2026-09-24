@@ -1,3 +1,4 @@
+from srg_mcp import _images, _raw
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
 from mcp.types import ToolAnnotations
@@ -162,9 +163,9 @@ def create_content(
         channel_id, category_ids=[...]) after create.
     main_asset_id: ID of the primary playable asset
     url: optional external URL to associate with the content
-    cover_image: http(s):// URL (or local path) of the cover; the URL PATH must
-        end in an image extension (.jpg/.png/...). Query strings are fine (signed
-        URLs work); an extension-less URL (e.g. placehold.co/600x400) returns 400.
+    cover_image: an http(s):// URL of the cover image (JPEG/PNG/WEBP/HEIC,
+        max 25 MB). No extension is needed — the type and size are read from
+        the bytes. The hosted server cannot read files on your computer.
     categories: category assignment objects
 
     context: the body — an ordered list of widget objects. Each widget MUST
@@ -192,6 +193,9 @@ def create_content(
     A single bad widget rejects the WHOLE call with 400 (the error now names the
     rejected field). Widget title (when set) is 1-150 chars.
     """
+    # Validate + measure the cover before creating anything (see update_content).
+    cover = _images.load(cover_image) if cover_image is not None else None
+
     result = get_client().contents.create(
         name=name,
         hub_profile_id=hub_profile_id,
@@ -200,12 +204,26 @@ def create_content(
         url=url,
         main_asset_id=main_asset_id,
         channels=channels,
-        cover_image=cover_image,
+        cover=cover.upsert()["image"] if cover is not None else None,
         context=context,
         categories=categories,
         workspace_id=workspace_id,
     )
-    return result.model_dump(mode="json")
+
+    if cover is None:
+        return result.model_dump(mode="json")
+
+    if result.cover_signed_url is None:
+        raise RuntimeError(
+            f"Content {result.id} was created, but SRG+ returned no cover upload "
+            "URL, so the cover was not set. Set it with update_content(cover_image=...)."
+        )
+    _images.put_signed(result.cover_signed_url.url, cover, result.metadata_headers)
+    return (
+        get_client()
+        .contents.get(result.id, hub_profile_id=hub_profile_id, workspace_id=workspace_id)
+        .model_dump(mode="json")
+    )
 
 
 @mcp.tool(
@@ -230,19 +248,24 @@ def update_content(
     context: list[dict] | None = None,
     categories: list[dict] | None = None,
 ) -> dict:
-    """Update a content item's metadata. Only provided fields are changed.
+    """Update a content item. ONLY the fields you pass are changed.
+
+    Every field you omit keeps its stored value: the cover, main asset,
+    channels, categories, body (context) and action buttons are never wiped
+    by an update that does not mention them. (Uses PATCH; the raw REST PUT
+    /contents is destructive and must not be used for partial edits.)
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Preview", "Private", or "Public"
-    channels: list of channel IDs (replaces existing placement)
+    channels: list of channel IDs (REPLACES the existing placement)
     main_asset_id: ID of the primary playable asset
     url: external URL to associate with the content
     hub_profile_id: the owning hub profile. Optional — when omitted it is
         resolved automatically from the content, so you normally do not pass it.
-    cover_image: http(s):// URL (or local path) of the cover; the URL PATH must
-        end in an image extension (.jpg/.png/...). Query strings are fine (signed
-        URLs work); an extension-less URL (e.g. placehold.co/600x400) returns 400.
-    categories: category assignment objects (REPLACES existing — to append,
+    cover_image: an http(s):// URL of a new cover image (JPEG/PNG/WEBP/HEIC,
+        max 25 MB). No extension is needed — the type and size are read from
+        the bytes. The hosted server cannot read files on your computer.
+    categories: category option objects (REPLACES existing — to append,
         read the content first and send the full list back)
 
     context: the body — REPLACES the existing widget list. Same widget shapes
@@ -251,29 +274,96 @@ def update_content(
     "ContentWidget"{referenceType,referenceIds:[{$type,id}]}. To append to the
     current body, read it first (get_content_v2) and send the existing widgets
     plus the new ones.
+
+    Returns {"id", "updated_fields": [...], "context": <echo>}. Verify the
+    persisted body with get_content_v2.
     """
-    # The PUT route needs the owning hub profile. Resolve it from the content
-    # when the caller didn't pass it, so updates don't fail with a bare 400.
+    # Fetch and validate a new cover BEFORE writing anything, so a bad URL
+    # cannot leave the content pointing at a cover that was never uploaded.
+    cover = _images.load(cover_image) if cover_image is not None else None
+
+    body = _patch_body(
+        name=name,
+        privacy=privacy,
+        details=details,
+        url=url,
+        main_asset_id=main_asset_id,
+        channels=channels,
+        context=context,
+        categories=categories,
+    )
+    if cover is not None:
+        body["cover"] = cover.upsert()
+    if not body:
+        raise ValueError("Nothing to update: pass at least one field to change.")
+
+    # The route needs the owning hub profile. Resolve it from the content when
+    # the caller didn't pass it, so updates don't fail with a bare 400.
     if hub_profile_id is None:
         hub_profile_id = get_client().contents.get_v2(
             content_id, workspace_id=workspace_id
         ).hub_profile_id
 
-    result = get_client().contents.update(
-        content_id,
-        name=name,
-        privacy=privacy,  # type: ignore[arg-type]
-        details=details,
-        url=url,
-        main_asset_id=main_asset_id,
-        hub_profile_id=hub_profile_id,
-        channels=channels,
-        cover_image=cover_image,
-        context=context,
-        categories=categories,
-        workspace_id=workspace_id,
+    data = (
+        _raw.call(
+            workspace_id,
+            "PATCH",
+            f"/api/v1/contents/{content_id}",
+            json=body,
+            params={"hubProfileId": hub_profile_id},
+        )
+        or {}
     )
-    return result.model_dump(mode="json")
+
+    if cover is not None:
+        signed = (data.get("coverSignedUrl") or {}).get("url")
+        if not signed:
+            raise RuntimeError(
+                "SRG+ accepted the cover but returned no upload URL; the cover "
+                "was not uploaded. Retry the update."
+            )
+        _images.put_signed(signed, cover, data.get("metadataHeaders"))
+
+    return {
+        "id": data.get("id", content_id),
+        "updated_fields": sorted(body),
+        "context": data.get("context", []),
+    }
+
+
+def _patch_body(
+    *,
+    name: str | None,
+    privacy: str | None,
+    details: str | None,
+    url: str | None,
+    main_asset_id: str | None,
+    channels: list | None,
+    context: list[dict] | None,
+    categories: list[dict] | None,
+) -> dict:
+    """PATCH body with only the supplied fields (omitted = keep stored value)."""
+    body: dict = {}
+    if name is not None:
+        body["name"] = name
+    if privacy is not None:
+        body["privacy"] = privacy
+    if details is not None:
+        body["details"] = details
+    if url is not None:
+        body["url"] = url
+    if main_asset_id is not None:
+        body["mainAssetId"] = main_asset_id
+    if channels is not None:
+        body["channels"] = [
+            {"channelId": ch, "categoryIds": []} if isinstance(ch, str) else ch
+            for ch in channels
+        ]
+    if context is not None:
+        body["context"] = context
+    if categories is not None:
+        body["categories"] = categories
+    return body
 
 
 def _post_content_lifecycle(content_id: str, workspace_id: str, action: str) -> None:

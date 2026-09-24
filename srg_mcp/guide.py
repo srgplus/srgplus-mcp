@@ -38,9 +38,9 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
 ## Create and place content
 1. `create_content(name, hub_profile_id, workspace_id, privacy="Preview",
    details=..., context=[...])`. `privacy` is "Preview" | "Private" | "Public".
-   Optional `cover_image` must be an http(s) URL whose PATH ends in an image
-   extension (.jpg/.png/...): `.../cover.jpg?sig=…` works (query is ignored),
-   but an extension-less URL (e.g. placehold.co/600x400) is rejected (400).
+   Optional `cover_image` is an http(s) URL of a JPEG/PNG/WEBP/HEIC image
+   (max 25 MB). It needs no extension — the type and size are read from the
+   bytes. The hosted server cannot read files on your computer.
 2. Place it with `add_content_to_categories(content_id, channel_id,
    category_ids=[...], workspace_id)`. A placement needs a CATEGORY, so passing
    `channels=[channel_id]` alone at create often does NOT stick (saved
@@ -70,11 +70,15 @@ A single bad widget rejects the whole write; the 400 now names the bad field.
   (each ref is `{"$type":"Content"|"Asset","id":".."}`)
 
 ## Update safely
-`update_content(content_id, workspace_id, ...)` MERGES scalar fields you pass
-(omitted ones are preserved). BUT any LIST you pass — `channels`, `context`,
-`categories` — REPLACES the whole list. To append a widget: `get_content_v2`
-first, extend the existing `context`, and send the full list back. You need not
-pass `hub_profile_id`; it is resolved from the content.
+`update_content(content_id, workspace_id, ...)` changes ONLY the fields you
+pass. Everything you omit — cover, main asset, channels, categories, body,
+action buttons — keeps its stored value, so rewriting captions never touches
+the cover. BUT any LIST you pass — `channels`, `context`, `categories` —
+REPLACES the whole list. To append a widget: `get_content_v2` first, extend the
+existing `context`, and send the full list back. You need not pass
+`hub_profile_id`; it is resolved from the content. Never call the raw REST
+`PUT /contents` for a partial edit: it wipes every field you omit, the cover
+included.
 
 ## Assets
 `upload_asset(hub_profile_id, name, workspace_id, source_url="https://..")` or
