@@ -28,11 +28,12 @@ Content body = the `context` list of widgets. Every widget needs a "$type": "Tex
 write; the error names the bad field. See the create_content/update_content tool docs for full shapes.
 
 Pitfalls that cause real damage — read before writing:
-- update_content merges SCALAR fields you pass (others are preserved), but any LIST you pass
+- update_content changes ONLY the fields you pass; everything you omit (cover, main asset,
+  channels, categories, body, action buttons) keeps its stored value. But any LIST you pass
   (channels, context, categories) REPLACES the whole list. To add one item, read the current
   content first (get_content_v2), extend the existing list, and send the full list back.
-  The raw REST PUT /contents is destructive — omitted fields are wiped. (update_content
-  resolves the owning hub profile for you — you need not pass hub_profile_id.)
+  The raw REST PUT /contents is destructive — omitted fields (even the cover) are wiped; never
+  use it for partial edits. (update_content resolves the owning hub profile for you.)
 - A 401/403 on an individual category or channel is NORMAL (per-item access control). Skip that
   item and continue the batch; do not treat it as a fatal error.
 - For content in PRIVATE channels, the slim list/filter endpoints omit channel/category
