@@ -97,6 +97,8 @@ def search_assets(
 def get_asset(asset_id: str, workspace_id: str) -> dict:
     """Get full asset details by ID (Media, File, Image, Embed, or Video).
 
+    The `url` field is a signed download URL (valid about 7 days): fetch it to
+    verify an uploaded file. `cover.urls` holds the generated thumbnails.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     return (
@@ -381,7 +383,9 @@ def upload_asset(
 
     Provide the file via exactly one of:
       - source_url: an http(s):// URL the server downloads, or
-      - base64_content: base64-encoded bytes (best for small files).
+      - base64_content: base64-encoded bytes (only for tiny files).
+    For files on the USER'S COMPUTER use create_upload instead: the bytes go
+    straight to storage with curl, nothing passes through the model context.
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     extension: file extension without the dot (e.g. "pdf", "png", "mp4").

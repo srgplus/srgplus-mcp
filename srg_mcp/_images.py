@@ -157,7 +157,9 @@ def load(source: str) -> CoverImage:
     if is_hosted():
         raise ValueError(
             "cover_image must be an http(s) URL: the hosted SRG+ server cannot "
-            "read files on your computer."
+            "read files on your computer. To use a local file, upload it with "
+            "create_upload → run the script → complete_upload, then call "
+            "set_cover(content_id, asset_id) (or update_content(cover_asset_id=...))."
         )
     path = Path(source).expanduser()
     if not path.is_file():

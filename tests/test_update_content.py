@@ -256,3 +256,59 @@ def test_describe_rejects_oversized_cover() -> None:
     big = PNG_1080x1920 + b"\x00" * (_images.MAX_COVER_BYTES + 1)
     with pytest.raises(ValueError, match="at most"):
         _images.describe(big, "https://cdn.example/huge.png")
+
+
+def test_cover_asset_id_alone_sets_cover_without_patch(raw: _Recorder, sdk, monkeypatch) -> None:
+    covers: list[tuple] = []
+    monkeypatch.setattr(
+        contents, "set_cover_from_asset", lambda ws, hub, cid, aid: covers.append((hub, cid, aid))
+    )
+
+    out = contents.update_content(CONTENT_ID, WS_ID, cover_asset_id="img-1")
+
+    assert raw.calls == []  # nothing else to change → no PATCH at all
+    assert covers == [(HUB_ID, CONTENT_ID, "img-1")]
+    assert out["updated_fields"] == ["cover"]
+
+
+def test_cover_asset_id_with_body_patches_then_sets_cover(raw: _Recorder, sdk, monkeypatch) -> None:
+    order: list[str] = []
+    monkeypatch.setattr(
+        contents, "set_cover_from_asset", lambda ws, hub, cid, aid: order.append("cover")
+    )
+    original = raw.__call__
+    monkeypatch.setattr(
+        contents._raw, "call", lambda *a, **k: (order.append("patch"), original(*a, **k))[1]
+    )
+
+    out = contents.update_content(
+        CONTENT_ID, WS_ID, context=[], cover_asset_id="img-1", hub_profile_id=HUB_ID
+    )
+
+    assert order == ["patch", "cover"]
+    assert "cover" not in raw.calls[0]["json"]  # the PATCH itself never carries a cover
+    assert out["updated_fields"] == ["context", "cover"]
+
+
+def test_cover_failure_after_patch_says_what_was_saved(raw: _Recorder, sdk, monkeypatch) -> None:
+    import srg.exceptions
+
+    def boom(*args):
+        raise srg.exceptions.BadRequestError(
+            {"detail": "Asset is not an image."}, SimpleNamespace(status_code=400)
+        )
+
+    monkeypatch.setattr(contents, "set_cover_from_asset", boom)
+
+    with pytest.raises(RuntimeError, match=r"\(name\) WERE updated.*not an image"):
+        contents.update_content(
+            CONTENT_ID, WS_ID, name="Reel 02", cover_asset_id="doc-1", hub_profile_id=HUB_ID
+        )
+
+
+def test_cover_image_and_cover_asset_id_are_exclusive(raw: _Recorder, sdk) -> None:
+    with pytest.raises(ValueError, match="not both"):
+        contents.update_content(
+            CONTENT_ID, WS_ID, cover_image="https://x/y.jpg", cover_asset_id="a1"
+        )
+    assert raw.calls == []

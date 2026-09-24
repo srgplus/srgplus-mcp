@@ -1,6 +1,9 @@
+import srg.exceptions
+
 from srg_mcp import _images, _raw
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from srg_mcp.uploads import set_cover_from_asset
 from mcp.types import ToolAnnotations
 
 
@@ -247,6 +250,7 @@ def update_content(
     cover_image: str | None = None,
     context: list[dict] | None = None,
     categories: list[dict] | None = None,
+    cover_asset_id: str | None = None,
 ) -> dict:
     """Update a content item. ONLY the fields you pass are changed.
 
@@ -265,6 +269,9 @@ def update_content(
     cover_image: an http(s):// URL of a new cover image (JPEG/PNG/WEBP/HEIC,
         max 25 MB). No extension is needed — the type and size are read from
         the bytes. The hosted server cannot read files on your computer.
+    cover_asset_id: use an Image that is already in the hub Drive as the
+        cover (e.g. an asset from complete_upload). Same as set_cover.
+        Pass cover_image OR cover_asset_id, not both.
     categories: category option objects (REPLACES existing — to append,
         read the content first and send the full list back)
 
@@ -278,6 +285,8 @@ def update_content(
     Returns {"id", "updated_fields": [...], "context": <echo>}. Verify the
     persisted body with get_content_v2.
     """
+    if cover_image is not None and cover_asset_id is not None:
+        raise ValueError("Pass cover_image OR cover_asset_id, not both.")
     # Fetch and validate a new cover BEFORE writing anything, so a bad URL
     # cannot leave the content pointing at a cover that was never uploaded.
     cover = _images.load(cover_image) if cover_image is not None else None
@@ -294,7 +303,7 @@ def update_content(
     )
     if cover is not None:
         body["cover"] = cover.upsert()
-    if not body:
+    if not body and cover_asset_id is None:
         raise ValueError("Nothing to update: pass at least one field to change.")
 
     # The route needs the owning hub profile. Resolve it from the content when
@@ -304,16 +313,29 @@ def update_content(
             content_id, workspace_id=workspace_id
         ).hub_profile_id
 
-    data = (
-        _raw.call(
-            workspace_id,
-            "PATCH",
-            f"/api/v1/contents/{content_id}",
-            json=body,
-            params={"hubProfileId": hub_profile_id},
+    data: dict = {}
+    if body:
+        data = (
+            _raw.call(
+                workspace_id,
+                "PATCH",
+                f"/api/v1/contents/{content_id}",
+                json=body,
+                params={"hubProfileId": hub_profile_id},
+            )
+            or {}
         )
-        or {}
-    )
+
+    if cover_asset_id is not None:
+        try:
+            set_cover_from_asset(workspace_id, hub_profile_id, content_id, cover_asset_id)
+        except srg.exceptions.SRGError as exc:
+            if not body:
+                raise
+            raise RuntimeError(
+                f"The other fields ({', '.join(sorted(body))}) WERE updated, but the "
+                f"cover was not set: {exc.message}"
+            ) from exc
 
     if cover is not None:
         signed = (data.get("coverSignedUrl") or {}).get("url")
@@ -324,9 +346,10 @@ def update_content(
             )
         _images.put_signed(signed, cover, data.get("metadataHeaders"))
 
+    updated = sorted(body) if cover_asset_id is None else sorted({*body, "cover"})
     return {
         "id": data.get("id", content_id),
-        "updated_fields": sorted(body),
+        "updated_fields": updated,
         "context": data.get("context", []),
     }
 

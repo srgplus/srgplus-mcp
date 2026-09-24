@@ -38,9 +38,11 @@ Pitfalls that cause real damage — read before writing:
   item and continue the batch; do not treat it as a fatal error.
 - For content in PRIVATE channels, the slim list/filter endpoints omit channel/category
   membership — use get_content_v2 to read it reliably.
-- Assets: use `upload_asset` (pass a public source_url or base64_content). The hosted server
-  cannot read local file paths. The create_*_asset tools only register an empty record and are
-  deprecated — do not use them to upload bytes.
+- Files on the user's computer (covers, photos, video): the hosted server cannot read local
+  paths, and base64 through the context does not scale. Use create_upload (returns a curl script)
+  → run the script locally → complete_upload → set_cover / set_covers (many at once). No base64.
+  upload_asset is only for a public source_url or a tiny base64 file. The create_*_asset tools
+  only register an empty record and are deprecated — do not use them to upload bytes.
 
 "No workspaces found for this API key" means the key was revoked or is invalid — issue a new
 one in SRG+ Settings → API Keys, do not retry.
