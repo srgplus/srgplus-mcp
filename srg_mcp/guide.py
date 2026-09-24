@@ -80,11 +80,54 @@ existing `context`, and send the full list back. You need not pass
 `PUT /contents` for a partial edit: it wipes every field you omit, the cover
 included.
 
-## Assets
-`upload_asset(hub_profile_id, name, workspace_id, source_url="https://..")` or
-`base64_content` + `extension`. The hosted server CANNOT read local file paths —
-use a public URL or base64. The `create_*_asset` tools only register an empty
-record and are deprecated; don't use them to upload bytes.
+Several agents/people editing the same content? `get_content_v2` returns a
+`version`. Pass it back as `update_content(..., expected_version=<version>)`
+(also `set_cover`, `set_covers` items): if someone changed the content since
+you read it you get a 409 instead of overwriting their edit — re-read, re-apply
+your change, retry. Without expected_version an update still never touches
+fields you did not pass.
+
+## Upload files from the user's computer (no base64, no public URL)
+The hosted server cannot read local paths and base64 does not scale (one
+300 KB JPEG is ~400K characters). The bytes go straight to storage instead:
+
+1. Collect size (and pixel size for images). macOS, for a folder of JPEGs:
+   ```
+   cd "<folder>"; for f in *.jpg; do printf '{"path":"%s","size":%s,"width":%s,"height":%s}\n' \
+     "$PWD/$f" "$(stat -f%z "$f")" \
+     "$(sips -g pixelWidth "$f" | awk '/pixelWidth/{print $2}')" \
+     "$(sips -g pixelHeight "$f" | awk '/pixelHeight/{print $2}')"; done
+   ```
+   (Linux: `stat -c%s FILE`, `identify -format '%w %h' FILE`.)
+2. `create_upload(hub_profile_id, workspace_id, files=[{"path","size","width","height"}, ...])`
+   — up to 100 files; returns `script` (bash + curl).
+3. Save `script` to a file and run it: `bash /tmp/srg_upload.sh`. It PUTs every
+   file (big videos in parts) and prints ONE JSON line.
+4. `complete_upload(workspace_id, uploads=<that JSON>)` → ready Drive assets
+   (safe to repeat; already-completed uploads are skipped).
+   Without the script (`output="urls"`), PUT each part yourself and keep its
+   ETag response header:
+   `curl -sS -f -X PUT -T "Reel 01.jpg" -D - -o /dev/null "<part url>" | grep -i etag`
+
+`upload_asset(..., source_url=...)` remains for files already on the web;
+`base64_content` only for tiny files. The `create_*_asset` tools only register
+an empty record and are deprecated; don't use them to upload bytes.
+
+## Covers
+- From a Drive image: `set_cover(content_id, asset_id, workspace_id)`; many at
+  once: `set_covers(items=[{"content_id","asset_id"}, ...], workspace_id,
+  hub_profile_id=...)` (one call; failures don't stop the batch). Right after
+  complete_upload an image needs a few seconds to be ready — these tools wait.
+  The bytes are copied into the cover, so it survives deleting the Drive file.
+- From a URL: `update_content(content_id, workspace_id, cover_image="https://...")`
+  (no extension needed). Or `update_content(cover_asset_id=...)`.
+- Body edits never touch the cover (update_content only changes what you pass).
+
+## Drive
+- `list_drive_files(hub_profile_id, workspace_id, types=["Image"], search=...)`
+  → compact rows (id, name, type, size, width/height). Paged via `cursor`.
+- `get_asset(asset_id, workspace_id)` → `url` is a signed download URL (~7 days)
+  to verify a file. The Drive has no folders yet.
 
 ## Archive / restore (reversible)
 Core is archive-only (no hard delete; deletion stays manual in-app):

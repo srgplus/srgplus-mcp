@@ -41,6 +41,11 @@ _STATUS_HINTS = {
         "ACLs make this normal for a subset of items — skip it and continue."
     ),
     404: "Resource not found — re-check the id (it may have been deleted).",
+    409: (
+        "Someone else changed it since you read it (or it is already in that "
+        "state). Re-read it (get_content_v2 gives the new `version`), re-apply "
+        "your change to the fresh data, and retry."
+    ),
     429: "Rate limited — wait a moment and retry.",
 }
 

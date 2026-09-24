@@ -8,6 +8,7 @@ import srg_mcp.users  # noqa: F401
 import srg_mcp.workspaces  # noqa: F401
 import srg_mcp.permission_groups  # noqa: F401
 import srg_mcp.guide  # noqa: F401
+import srg_mcp.uploads  # noqa: F401
 
 
 def main() -> None:

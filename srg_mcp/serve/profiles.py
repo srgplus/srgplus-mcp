@@ -40,6 +40,13 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    # Media from the user's computer (no base64) + covers + Drive (SRGDEV-741)
+    "create_upload",
+    "complete_upload",
+    "set_cover",
+    "set_covers",
+    "list_drive_files",
+    "get_asset",
     # Lifecycle — ARCHIVE ONLY in the core profile (reversible). Hard delete is
     # intentionally kept OUT of the agent connector for now (manual-only in the
     # app); the delete_* tools still exist on the full /mcp surface for admin use.
