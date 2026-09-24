@@ -390,9 +390,16 @@ def _still_uploading(exc: srg.exceptions.APIStatusError) -> bool:
 
 
 def set_cover_from_asset(
-    workspace_id: str, hub_profile_id: str, content_id: str, asset_id: str
+    workspace_id: str,
+    hub_profile_id: str,
+    content_id: str,
+    asset_id: str,
+    expected_version: int | None = None,
 ) -> None:
     """POST .../cover/from-asset, waiting out the post-upload "still uploading" window."""
+    headers = (
+        None if expected_version is None else {"If-Match": f'"{int(expected_version)}"'}
+    )
     delays = iter(_STILL_UPLOADING_RETRY_DELAYS)
     while True:
         try:
@@ -402,6 +409,7 @@ def set_cover_from_asset(
                 f"/api/v1/contents/{content_id}/cover/from-asset",
                 json={"coverAssetId": asset_id},
                 params={"hubProfileId": hub_profile_id},
+                headers=headers,
             )
             return
         except srg.exceptions.APIStatusError as exc:
@@ -424,6 +432,7 @@ def set_cover(
     asset_id: str,
     workspace_id: str,
     hub_profile_id: str | None = None,
+    expected_version: int | None = None,
 ) -> dict:
     """Use an image that is already in the hub Drive as a content's cover.
 
@@ -432,11 +441,13 @@ def set_cover(
         cover stays even if the Drive file is deleted later. Right after an
         upload the image may need a few seconds to be ready; this tool waits.
     hub_profile_id: owning hub; resolved from the content when omitted.
+    expected_version: optional `version` from get_content_v2 — the cover is
+        set only if the content did not change since; else 409.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     For many covers at once use set_covers.
     """
     hub = hub_profile_id or _hub_of(content_id, workspace_id)
-    set_cover_from_asset(workspace_id, hub, content_id, asset_id)
+    set_cover_from_asset(workspace_id, hub, content_id, asset_id, expected_version)
     return {"content_id": content_id, "asset_id": asset_id, "status": "cover_set"}
 
 
@@ -455,7 +466,8 @@ def set_covers(
 ) -> dict:
     """Set covers on many contents in one call, each from a Drive image.
 
-    items: [{"content_id": "...", "asset_id": "..."}, ...] (up to 100).
+    items: [{"content_id": "...", "asset_id": "..."}, ...] (up to 100); an
+        item may add "expected_version" (from get_content_v2) → 409 if stale.
     hub_profile_id: pass it when all contents are in one hub (saves a lookup
         per item); otherwise each content's hub is resolved automatically.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
@@ -473,7 +485,9 @@ def set_covers(
             return {**item, "status": "failed", "error": "needs content_id and asset_id"}
         try:
             hub = hub_profile_id or _hub_of(content_id, workspace_id)
-            set_cover_from_asset(workspace_id, hub, content_id, asset_id)
+            set_cover_from_asset(
+                workspace_id, hub, content_id, asset_id, item.get("expected_version")
+            )
         except srg.exceptions.SRGError as exc:
             return {
                 "content_id": content_id,

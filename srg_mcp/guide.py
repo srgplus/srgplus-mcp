@@ -80,6 +80,13 @@ existing `context`, and send the full list back. You need not pass
 `PUT /contents` for a partial edit: it wipes every field you omit, the cover
 included.
 
+Several agents/people editing the same content? `get_content_v2` returns a
+`version`. Pass it back as `update_content(..., expected_version=<version>)`
+(also `set_cover`, `set_covers` items): if someone changed the content since
+you read it you get a 409 instead of overwriting their edit — re-read, re-apply
+your change, retry. Without expected_version an update still never touches
+fields you did not pass.
+
 ## Upload files from the user's computer (no base64, no public URL)
 The hosted server cannot read local paths and base64 does not scale (one
 300 KB JPEG is ~400K characters). The bytes go straight to storage instead:

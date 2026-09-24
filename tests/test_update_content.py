@@ -261,20 +261,31 @@ def test_describe_rejects_oversized_cover() -> None:
 def test_cover_asset_id_alone_sets_cover_without_patch(raw: _Recorder, sdk, monkeypatch) -> None:
     covers: list[tuple] = []
     monkeypatch.setattr(
-        contents, "set_cover_from_asset", lambda ws, hub, cid, aid: covers.append((hub, cid, aid))
+        contents,
+        "set_cover_from_asset",
+        lambda ws, hub, cid, aid, expected_version=None: covers.append(
+            (hub, cid, aid, expected_version)
+        ),
     )
 
-    out = contents.update_content(CONTENT_ID, WS_ID, cover_asset_id="img-1")
+    out = contents.update_content(
+        CONTENT_ID, WS_ID, cover_asset_id="img-1", expected_version=4
+    )
 
     assert raw.calls == []  # nothing else to change → no PATCH at all
-    assert covers == [(HUB_ID, CONTENT_ID, "img-1")]
+    # The precondition travels with the cover call when it is the only change.
+    assert covers == [(HUB_ID, CONTENT_ID, "img-1", 4)]
     assert out["updated_fields"] == ["cover"]
 
 
 def test_cover_asset_id_with_body_patches_then_sets_cover(raw: _Recorder, sdk, monkeypatch) -> None:
     order: list[str] = []
     monkeypatch.setattr(
-        contents, "set_cover_from_asset", lambda ws, hub, cid, aid: order.append("cover")
+        contents,
+        "set_cover_from_asset",
+        lambda ws, hub, cid, aid, expected_version=None: order.append(
+            f"cover:{expected_version}"
+        ),
     )
     original = raw.__call__
     monkeypatch.setattr(
@@ -282,10 +293,17 @@ def test_cover_asset_id_with_body_patches_then_sets_cover(raw: _Recorder, sdk, m
     )
 
     out = contents.update_content(
-        CONTENT_ID, WS_ID, context=[], cover_asset_id="img-1", hub_profile_id=HUB_ID
+        CONTENT_ID,
+        WS_ID,
+        context=[],
+        cover_asset_id="img-1",
+        hub_profile_id=HUB_ID,
+        expected_version=4,
     )
 
-    assert order == ["patch", "cover"]
+    # The PATCH carries If-Match; the cover call after it does not (version moved on).
+    assert order == ["patch", "cover:None"]
+    assert raw.calls[0]["headers"] == {"If-Match": '"4"'}
     assert "cover" not in raw.calls[0]["json"]  # the PATCH itself never carries a cover
     assert out["updated_fields"] == ["context", "cover"]
 
@@ -293,7 +311,7 @@ def test_cover_asset_id_with_body_patches_then_sets_cover(raw: _Recorder, sdk, m
 def test_cover_failure_after_patch_says_what_was_saved(raw: _Recorder, sdk, monkeypatch) -> None:
     import srg.exceptions
 
-    def boom(*args):
+    def boom(*args, **kwargs):
         raise srg.exceptions.BadRequestError(
             {"detail": "Asset is not an image."}, SimpleNamespace(status_code=400)
         )
@@ -312,3 +330,38 @@ def test_cover_image_and_cover_asset_id_are_exclusive(raw: _Recorder, sdk) -> No
             CONTENT_ID, WS_ID, cover_image="https://x/y.jpg", cover_asset_id="a1"
         )
     assert raw.calls == []
+
+
+def test_expected_version_is_sent_as_if_match(raw: _Recorder, sdk) -> None:
+    contents.update_content(CONTENT_ID, WS_ID, name="Reel 03", expected_version=12)
+    assert raw.calls[0]["headers"] == {"If-Match": '"12"'}
+
+    contents.update_content(CONTENT_ID, WS_ID, name="Reel 03")
+    assert raw.calls[1]["headers"] is None  # no precondition unless asked
+
+
+def test_get_content_v2_passes_version_and_cover_source(raw: _Recorder, monkeypatch) -> None:
+    raw.response = {
+        "id": CONTENT_ID,
+        "privacy": "Public",
+        "name": "Reel 01",
+        "details": None,
+        "url": None,
+        "createdBy": "u1",
+        "hubProfileId": HUB_ID,
+        "created": "2026-09-23T00:00:00Z",
+        "mainAsset": None,
+        "channels": [],
+        "context": [],
+        "categories": [],
+        "cover": {"urls": {"original": "https://r2/x"}, "extension": "jpg",
+                  "sourceAssetId": "img-7", "width": 1080, "height": 1920},
+        "version": 9,
+    }
+
+    out = contents.get_content_v2(CONTENT_ID, WS_ID)
+
+    assert raw.calls[0]["path"] == f"/api/v2/contents/{CONTENT_ID}"
+    assert out["version"] == 9
+    assert out["cover"]["source_asset_id"] == "img-7"
+    assert out["hub_profile_id"] == HUB_ID  # same snake_case shape as before

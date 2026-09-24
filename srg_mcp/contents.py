@@ -1,4 +1,5 @@
 import srg.exceptions
+from srg.schemas.content import ContentV2
 
 from srg_mcp import _images, _raw
 from srg_mcp._app import mcp
@@ -127,12 +128,20 @@ def get_content_v2(content_id: str, workspace_id: str) -> dict:
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     Includes main asset, user progression, and extended metadata.
+    Also returns `version`: pass it as expected_version to update_content /
+    set_cover so a stale write fails with 409 instead of overwriting someone
+    else's newer edit. `cover.source_asset_id` is the Drive image the cover was
+    set from (re-apply it with set_cover).
     """
-    return (
-        get_client()
-        .contents.get_v2(content_id, workspace_id=workspace_id)
-        .model_dump(mode="json")
-    )
+    data = _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}") or {}
+    result = ContentV2.model_validate(data).model_dump(mode="json")
+    # Fields newer than the pinned SDK's model: pass them through.
+    if data.get("version") is not None:
+        result["version"] = data["version"]
+    source = (data.get("cover") or {}).get("sourceAssetId")
+    if source and isinstance(result.get("cover"), dict):
+        result["cover"]["source_asset_id"] = source
+    return result
 
 
 @mcp.tool(
@@ -251,6 +260,7 @@ def update_content(
     context: list[dict] | None = None,
     categories: list[dict] | None = None,
     cover_asset_id: str | None = None,
+    expected_version: int | None = None,
 ) -> dict:
     """Update a content item. ONLY the fields you pass are changed.
 
@@ -272,6 +282,10 @@ def update_content(
     cover_asset_id: use an Image that is already in the hub Drive as the
         cover (e.g. an asset from complete_upload). Same as set_cover.
         Pass cover_image OR cover_asset_id, not both.
+    expected_version: the `version` from get_content_v2. When set, the update
+        applies only if nobody changed the content since you read it; else it
+        fails with 409 (re-read, re-apply, retry). Use it when several agents
+        or people may edit the same content.
     categories: category option objects (REPLACES existing — to append,
         read the content first and send the full list back)
 
@@ -313,6 +327,7 @@ def update_content(
             content_id, workspace_id=workspace_id
         ).hub_profile_id
 
+    if_match = None if expected_version is None else f'"{int(expected_version)}"'
     data: dict = {}
     if body:
         data = (
@@ -322,13 +337,22 @@ def update_content(
                 f"/api/v1/contents/{content_id}",
                 json=body,
                 params={"hubProfileId": hub_profile_id},
+                headers={"If-Match": if_match} if if_match else None,
             )
             or {}
         )
 
     if cover_asset_id is not None:
         try:
-            set_cover_from_asset(workspace_id, hub_profile_id, content_id, cover_asset_id)
+            # After a PATCH the version already moved on (and was checked), so
+            # the precondition applies only when the cover is the sole change.
+            set_cover_from_asset(
+                workspace_id,
+                hub_profile_id,
+                content_id,
+                cover_asset_id,
+                expected_version=None if body else expected_version,
+            )
         except srg.exceptions.SRGError as exc:
             if not body:
                 raise

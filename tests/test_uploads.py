@@ -379,3 +379,19 @@ def test_list_drive_files_search_and_type_validation(api: _Api) -> None:
     assert out["items"][0]["id"] == "i1" and out["cursor"] is None
     with pytest.raises(ValueError, match="Unknown type"):
         uploads.list_drive_files(HUB, WS, types=["Folder"])
+
+
+def test_set_cover_sends_if_match_when_expected_version_given(api: _Api) -> None:
+    api.routes[("POST", "/api/v1/contents/c1/cover/from-asset")] = None
+    seen: list = []
+    original = api.__call__
+
+    def spy(workspace_id, method, path, *, json=None, params=None, headers=None):
+        seen.append(headers)
+        return original(workspace_id, method, path, json=json, params=params, headers=headers)
+
+    uploads._raw.call = spy  # monkeypatched back by the fixture teardown
+    uploads.set_cover("c1", "img-1", WS, hub_profile_id=HUB, expected_version=3)
+    uploads.set_cover("c1", "img-1", WS, hub_profile_id=HUB)
+
+    assert seen == [{"If-Match": '"3"'}, None]

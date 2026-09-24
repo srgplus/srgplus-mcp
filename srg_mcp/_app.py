@@ -34,6 +34,8 @@ Pitfalls that cause real damage — read before writing:
   content first (get_content_v2), extend the existing list, and send the full list back.
   The raw REST PUT /contents is destructive — omitted fields (even the cover) are wiped; never
   use it for partial edits. (update_content resolves the owning hub profile for you.)
+  When others may edit the same content, pass expected_version (the `version` from
+  get_content_v2): a stale write then fails with 409 instead of overwriting their edit.
 - A 401/403 on an individual category or channel is NORMAL (per-item access control). Skip that
   item and continue the batch; do not treat it as a fatal error.
 - For content in PRIVATE channels, the slim list/filter endpoints omit channel/category
