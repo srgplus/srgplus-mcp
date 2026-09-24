@@ -17,11 +17,14 @@ tools do not depend on an unreleased SDK version.
 
 from __future__ import annotations
 
+import contextvars
 import math
 import shlex
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import PurePath
+from typing import TypeVar
 
 import srg.exceptions
 from mcp.types import ToolAnnotations
@@ -47,6 +50,23 @@ _VIDEO_EXTS = {
     "4mv", "amv", "avi", "flv", "m4p", "m4v", "mkv", "mov", "mp4", "mpeg",
     "mpg", "mxf", "ogg", "ts", "vod", "webm", "wmv",
 }  # fmt: skip
+
+
+_T = TypeVar("_T")
+_R = TypeVar("_R")
+
+
+def _parallel(fn: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
+    """Run ``fn`` over ``items`` on a small thread pool, in order.
+
+    Each task runs in a COPY of the caller's context: executor threads start
+    with an empty one, and the hosted server binds the request's API key in a
+    contextvar, so without the copy every call in a worker fell back to the
+    SRG_API_KEYS env var and failed.
+    """
+    with ThreadPoolExecutor(max_workers=_API_WORKERS) as pool:
+        futures = [pool.submit(contextvars.copy_context().run, fn, item) for item in items]
+        return [future.result() for future in futures]
 
 
 def _part_size(file_size: int) -> int:
@@ -373,8 +393,7 @@ def complete_upload(workspace_id: str, uploads: list[dict]) -> dict:
     """
     if not uploads:
         raise ValueError("Pass the uploads JSON printed by the create_upload script.")
-    with ThreadPoolExecutor(max_workers=_API_WORKERS) as pool:
-        rows = list(pool.map(lambda u: _complete_one(workspace_id, u), uploads))
+    rows = _parallel(lambda u: _complete_one(workspace_id, u), uploads)
     failed = sum(1 for r in rows if r["status"] == "failed")
     return {"assets": rows, "completed": len(rows) - failed, "failed": failed}
 
@@ -497,8 +516,7 @@ def set_covers(
             }
         return {"content_id": content_id, "asset_id": asset_id, "status": "cover_set"}
 
-    with ThreadPoolExecutor(max_workers=_API_WORKERS) as pool:
-        results = list(pool.map(one, items))
+    results = _parallel(one, items)
     failed = sum(1 for r in results if r["status"] == "failed")
     return {"results": results, "set": len(results) - failed, "failed": failed}
 

@@ -395,3 +395,38 @@ def test_set_cover_sends_if_match_when_expected_version_given(api: _Api) -> None
     uploads.set_cover("c1", "img-1", WS, hub_profile_id=HUB)
 
     assert seen == [{"If-Match": '"3"'}, None]
+
+
+def test_worker_threads_see_the_request_api_key(monkeypatch) -> None:
+    """Regression (found by the prod acceptance run): the hosted server binds the
+    caller's key in a contextvar; plain executor threads start with an empty
+    context, so complete_upload / set_covers fell back to SRG_API_KEYS and failed
+    with "api_keys must be provided"."""
+    import srg_mcp._client as client_mod
+
+    seen: list = []
+
+    def fake_call(workspace_id, method, path, *, json=None, params=None, headers=None):
+        seen.append(client_mod._current_key_var.get())
+        if path.startswith("/api/v1/assets/"):
+            return {"$type": "Image", "name": "x.jpg"}
+        return None
+
+    monkeypatch.setattr(uploads._raw, "call", fake_call)
+    token = client_mod.set_current_api_key("srgplus_request_key")
+    try:
+        done = uploads.complete_upload(
+            WS,
+            uploads=[
+                {"asset_id": f"a{i}", "upload_id": f"u{i}", "parts": [{"part_number": 1, "etag": "e"}]}
+                for i in range(6)
+            ],
+        )
+        covers = uploads.set_covers(
+            [{"content_id": f"c{i}", "asset_id": f"a{i}"} for i in range(6)], WS, hub_profile_id=HUB
+        )
+    finally:
+        client_mod.reset_current_api_key(token)
+
+    assert done["completed"] == 6 and covers["set"] == 6
+    assert seen and set(seen) == {"srgplus_request_key"}
