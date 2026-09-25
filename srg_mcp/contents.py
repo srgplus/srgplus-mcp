@@ -188,7 +188,7 @@ def create_content(
     camelCase: the backend rejects snake_case for multi-word fields (assetId,
     hubProfileIds, referenceIds) as a silent 400, so never send asset_id etc.
     Shapes:
-      • Text (markdown body):
+      • Text (body in GitHub Flavored Markdown + ==highlight==; rules in get_srgplus_guide()):
         {"$type": "Text", "content": "<markdown, required>", "title": "<optional>"}
       • LinkList:
         {"$type": "LinkList", "title": "<optional>", "links": [
@@ -304,7 +304,8 @@ def update_content(
     title,url}]}; "Media"{assetId,autoplay}; "HubProfile"{hubProfileIds:[...]};
     "ContentWidget"{referenceType,referenceIds:[{$type,id}]}. To append to the
     current body, read it first (get_content_v2) and send the existing widgets
-    plus the new ones. NOTE: a ContentWidget is WRITTEN with `referenceIds`
+    plus the new ones. Send the Text `content` you did not mean to change back
+    byte for byte (no re-formatting). NOTE: a ContentWidget is WRITTEN with `referenceIds`
     but READ BACK (get_content_v2) with `references` — expanded objects whose
     `$type` is the item kind (Content, or Image/Video/File/Media/Embed for
     assets). Same data; when re-sending a widget you read, map

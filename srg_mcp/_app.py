@@ -20,7 +20,7 @@ call `get_srgplus_guide()` — it ships with this connector, so you never need a
 separate skill or plugin installed. Pull it before authoring content if unsure.
 
 Content body = the `context` list of widgets. Every widget needs a "$type": "Text"
-(field `content`, markdown), "LinkList" (field `links`, each a {"$type":"CustomLink"|"KnownLink",
+(field `content`, Markdown), "LinkList" (field `links`, each a {"$type":"CustomLink"|"KnownLink",
 "title","url"} — both link kinds use title+url), "Media" (field `assetId`), "HubProfile"
 (field `hubProfileIds`, an array), or "ContentWidget" (fields `referenceType` +
 `referenceIds`:[{"$type":"Content"|"Asset","id":..}]). Widget keys are camelCase — snake_case
@@ -42,6 +42,10 @@ Pitfalls that cause real damage — read before writing:
   use it for partial edits. (update_content resolves the owning hub profile for you.)
   When others may edit the same content, pass expected_version (the `version` from
   get_content_v2): a stale write then fails with 409 instead of overwriting their edit.
+- Text `content` is GitHub Flavored Markdown plus ==highlight== (full rules: get_srgplus_guide).
+  Leave a blank line before and after tables, lists and `---` rules, write a pipe inside a table
+  cell as \\|, and when editing a Text widget send the parts you did not change back byte for byte
+  (no re-wrapping, no re-formatting): people edit the same text in the SRG+ apps.
 - A 401/403 on an individual category or channel is NORMAL (per-item access control). Skip that
   item and continue the batch; do not treat it as a fatal error.
 - For content in PRIVATE channels, the slim list/filter endpoints omit channel/category
