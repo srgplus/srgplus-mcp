@@ -69,6 +69,13 @@ A single bad widget rejects the whole write; the 400 now names the bad field.
     "referenceIds":[{"$type":"Content","id":"<content id>"}],"title":"<optional>"}`
   (each ref is `{"$type":"Content"|"Asset","id":".."}`)
 
+Write vs read: a ContentWidget is WRITTEN with `referenceIds` but READ BACK by
+`get_content_v2` with `references` — expanded objects whose `$type` is the item
+kind (`Content`, or `Image`/`Video`/`File`/`Media`/`Embed` for assets). Same
+data, different key: a missing `referenceIds` on read does NOT mean the write
+failed. To re-send a widget you read, map `references` → `referenceIds`
+`[{"$type":"Content"|"Asset","id":..}]`.
+
 ## Update safely
 `update_content(content_id, workspace_id, ...)` changes ONLY the fields you
 pass. Everything you omit — cover, main asset, channels, categories, body,
@@ -86,6 +93,36 @@ Several agents/people editing the same content? `get_content_v2` returns a
 you read it you get a 409 instead of overwriting their edit — re-read, re-apply
 your change, retry. Without expected_version an update still never touches
 fields you did not pass.
+
+## Featured Assets / Featured Content (the content's "More" menu)
+Every content item has two built-in lists: **Featured Assets** (Drive assets)
+and **Featured Content** (other content items; a content with any becomes a
+Collection). Each has one unnamed default section (always first) plus any
+number of NAMED sections — use them for versions ("Version 1", "Version 2").
+
+- `set_featured_assets(content_id, workspace_id, asset_ids=[...], section_name="Version 2")`
+  → the section is created if missing and then holds exactly those assets, in
+  that order (REPLACES that section's items; other sections are untouched).
+  A new named section is placed first among the named ones, so the newest
+  version shows first. Without section_name the default section is used.
+  `set_featured_contents(..., content_ids=[...])` is the same for content.
+- `list_featured_sections(content_id, workspace_id, kind="Asset"|"Content")`
+  → sections in display order with their ids (compact, no signed URLs). This
+  is the exact read; get_content_v2 shows at most 15 items per category and can
+  lag a few seconds after a write.
+- `reorder_featured_sections(content_id, section_ids=[...], workspace_id)`;
+  `delete_featured_section(content_id, section_id, workspace_id)` (unlinks the
+  items; the assets themselves stay in Drive).
+- An item can be in only ONE section of a content: reusing a Version 1 frame
+  in Version 2 is reported in `skipped` (remove it from Version 1 first, or
+  upload a copy). Check `skipped` after every call.
+- `update_content(categories=...)` writes only a category's `options`; it
+  rejects `references`/`sections` changes (the API would ignore them).
+
+Recipe, carousel versions: upload the frames (create_upload → complete_upload)
+→ `set_featured_assets(content_id, ws, asset_ids=<frames in order>,
+section_name="Version 1")`; later a new set → `section_name="Version 2"`.
+Versions accumulate; nothing is overwritten.
 
 ## Upload files from the user's computer (no base64, no public URL)
 The hosted server cannot read local paths and base64 does not scale (one
@@ -143,7 +180,8 @@ Core is archive-only (no hard delete; deletion stays manual in-app):
   `get_content_v2`.
 - Two profiles on one host: `https://mcp.srgplus.com` (curated daily set, the
   default) and `https://mcp.srgplus.com/mcp` (full set: users, permissions,
-  hard delete, sections, workspace actions). Don't connect both in one surface.
+  hard delete, low-level collection subcontent, workspace actions). Don't
+  connect both in one surface.
 """
 
 
@@ -157,7 +195,8 @@ Core is archive-only (no hard delete; deletion stays manual in-app):
 )
 def get_srgplus_guide() -> str:
     """Return the full SRG+ how-to guide: navigation, content creation, the
-    exact widget shapes for the `context` body, safe-update rules, asset upload,
+    exact widget shapes for the `context` body, safe-update rules, Featured
+    Assets / Featured Content with named sections (versions), asset upload,
     archive/restore, and common pitfalls.
 
     Call this once before authoring or editing content if you are unsure of the

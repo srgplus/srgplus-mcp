@@ -111,7 +111,7 @@ def test_only_supplied_fields_are_sent(raw: _Recorder, sdk) -> None:
         url="https://example.org",
         main_asset_id="asset-1",
         channels=["ch-1"],
-        categories=[{"$type": "Content"}],
+        categories=[{"$type": "Content", "options": {"expandable": False}}],
         hub_profile_id=HUB_ID,
     )
 
@@ -121,7 +121,7 @@ def test_only_supplied_fields_are_sent(raw: _Recorder, sdk) -> None:
         "url": "https://example.org",
         "mainAssetId": "asset-1",
         "channels": [{"channelId": "ch-1", "categoryIds": []}],
-        "categories": [{"$type": "Content"}],
+        "categories": [{"$type": "Content", "options": {"expandable": False}}],
     }
 
 

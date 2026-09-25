@@ -178,7 +178,10 @@ def create_content(
     cover_image: an http(s):// URL of the cover image (JPEG/PNG/WEBP/HEIC,
         max 25 MB). No extension is needed — the type and size are read from
         the bytes. The hosted server cannot read files on your computer.
-    categories: category assignment objects
+    categories: options of the content's built-in categories,
+        [{"$type": "Asset" | "Content", "options": {...}}]. To fill Featured
+        Assets / Featured Content (named sections such as "Version 1"), create
+        the content first, then call set_featured_assets / set_featured_contents.
 
     context: the body — an ordered list of widget objects. Each widget MUST
     carry a "$type" discriminator (literal key, with the dollar sign). Keys are
@@ -201,7 +204,9 @@ def create_content(
         (hubProfileIds is a REQUIRED array, even for a single hub)
       • ContentWidget: {"$type": "ContentWidget", "referenceType": "Content",
             "referenceIds": [{"$type": "Content", "id": "<content id>"}], "title": "<optional>"}
-        (each reference is {"$type": "Content"|"Asset", "id": "..."}; referenceType matches the kind)
+        (each reference is {"$type": "Content"|"Asset", "id": "..."}; referenceType matches the kind.
+        Read back via get_content_v2 the widget shows `references` — expanded
+        objects, assets as $type Image/Video/File/... — instead of `referenceIds`.)
     A single bad widget rejects the WHOLE call with 400 (the error now names the
     rejected field). Widget title (when set) is 1-150 chars.
     """
@@ -286,21 +291,35 @@ def update_content(
         applies only if nobody changed the content since you read it; else it
         fails with 409 (re-read, re-apply, retry). Use it when several agents
         or people may edit the same content.
-    categories: category option objects (REPLACES existing — to append,
-        read the content first and send the full list back)
+    categories: the OPTIONS of the content's two built-in categories only:
+        [{"$type": "Asset" | "Content", "options": {...}}]. It CANNOT put items
+        into Featured Assets / Featured Content or name their sections — use
+        set_featured_assets / set_featured_contents for that. A category whose
+        `references`/`sections` differ from the stored ones is rejected (the
+        API would silently ignore them); unchanged ones echoed from
+        get_content_v2 are fine and dropped.
 
     context: the body — REPLACES the existing widget list. Same widget shapes
     as create_content, camelCase keys: "Text"{content}; "LinkList"{links:[{$type,
     title,url}]}; "Media"{assetId,autoplay}; "HubProfile"{hubProfileIds:[...]};
     "ContentWidget"{referenceType,referenceIds:[{$type,id}]}. To append to the
     current body, read it first (get_content_v2) and send the existing widgets
-    plus the new ones.
+    plus the new ones. NOTE: a ContentWidget is WRITTEN with `referenceIds`
+    but READ BACK (get_content_v2) with `references` — expanded objects whose
+    `$type` is the item kind (Content, or Image/Video/File/Media/Embed for
+    assets). Same data; when re-sending a widget you read, map
+    references → referenceIds [{"$type": "Content"|"Asset", "id"}].
 
-    Returns {"id", "updated_fields": [...], "context": <echo>}. Verify the
-    persisted body with get_content_v2.
+    Returns {"id", "updated_fields": [...], "context": <echo>}.
+    `updated_fields` lists only what was sent AND is writable (for categories:
+    their options). Verify the persisted body with get_content_v2.
     """
     if cover_image is not None and cover_asset_id is not None:
         raise ValueError("Pass cover_image OR cover_asset_id, not both.")
+    if categories is not None:
+        categories, stored = _category_options(content_id, workspace_id, categories)
+        if hub_profile_id is None and stored is not None:
+            hub_profile_id = stored.get("hubProfileId")
     # Fetch and validate a new cover BEFORE writing anything, so a bad URL
     # cannot leave the content pointing at a cover that was never uploaded.
     cover = _images.load(cover_image) if cover_image is not None else None
@@ -408,9 +427,89 @@ def _patch_body(
         ]
     if context is not None:
         body["context"] = context
-    if categories is not None:
+    if categories:
         body["categories"] = categories
     return body
+
+
+# What PATCH /contents can write per category: only its options. The API
+# ignores `references`/`sections` there without an error (SRGDEV-756), and the
+# paging fields are read-only.
+_CATEGORY_WRITABLE = {"$type", "options"}
+_CATEGORY_READ_ONLY = {"totalCount", "nextCursor", "hasNext"}
+_CATEGORY_FEATURED = {"references", "sections"}
+
+
+def _ref_ids(items: list) -> list:
+    return [item.get("id") if isinstance(item, dict) else item for item in items or []]
+
+
+def _section_keys(items: list) -> list:
+    return [
+        (s.get("$type"), s.get("id"), s.get("name")) if isinstance(s, dict) else s
+        for s in items or []
+    ]
+
+
+def _category_options(
+    content_id: str, workspace_id: str, categories: list[dict]
+) -> tuple[list[dict], dict | None]:
+    """Reduce `categories` to what the API will write, or fail loudly.
+
+    Echoing a category read from get_content_v2 is fine: unchanged
+    `references`/`sections` and the paging fields are dropped (nothing is
+    lost). A CHANGE to references/sections, or an unknown key, raises instead
+    of being silently ignored by the API. Returns (categories to send, the
+    stored content when it had to be read).
+    """
+    stored: dict | None = None
+    cleaned: list[dict] = []
+    for index, category in enumerate(categories):
+        if not isinstance(category, dict):
+            raise ValueError(
+                f'categories[{index}] must be an object like {{"$type": "Asset", "options": {{...}}}}.'
+            )
+        kind = category.get("$type")
+        if kind not in ("Content", "Asset"):
+            raise ValueError(
+                f'categories[{index}]: "$type" must be "Content" (Featured Content) or '
+                f'"Asset" (Featured Assets), got {kind!r}.'
+            )
+        unknown = set(category) - _CATEGORY_WRITABLE - _CATEGORY_READ_ONLY - _CATEGORY_FEATURED
+        if unknown:
+            raise ValueError(
+                f"categories[{index}] ({kind}): {sorted(unknown)} cannot be written; "
+                'update_content writes only a category\'s "options".'
+            )
+        featured = [key for key in ("references", "sections") if key in category]
+        if featured:
+            if stored is None:
+                stored = _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}") or {}
+            current = next(
+                (c for c in stored.get("categories") or [] if c.get("$type") == kind), {}
+            )
+            changed = [
+                key
+                for key, norm in (("references", _ref_ids), ("sections", _section_keys))
+                if key in category and norm(category[key]) != norm(current.get(key))
+            ]
+            if changed:
+                tool, param = (
+                    ("set_featured_assets", "asset_ids")
+                    if kind == "Asset"
+                    else ("set_featured_contents", "content_ids")
+                )
+                raise ValueError(
+                    f"categories[{index}] ({kind}): update_content cannot change {changed} — "
+                    f"the API ignores them here, so nothing would be saved. Use {tool}("
+                    f"content_id, workspace_id, {param}=[...], section_name=...) to put items "
+                    "into Featured Assets / Featured Content and name sections; see "
+                    "list_featured_sections. Pass only {\"$type\", \"options\"} here."
+                )
+        if "options" in category:
+            # "$type" first: .NET reads the discriminator only as the first key.
+            cleaned.append({"$type": kind, "options": category["options"]})
+    return cleaned, stored
 
 
 def _post_content_lifecycle(content_id: str, workspace_id: str, action: str) -> None:
@@ -585,7 +684,10 @@ def create_content_section(
     """Create a section inside a collection content item's category.
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
-    category_name: the name slug of the category (e.g. "week-1")
+    category_name: "Content" (Featured Content) or "Asset" (Featured Assets)
+    Prefer set_featured_assets / set_featured_contents(section_name=...), which
+    create the section and fill it in one call.
+    Returns {"id": "<new section id>"}.
     """
     return get_client().contents.create_section(
         content_id, category_name, name=name, workspace_id=workspace_id
@@ -748,7 +850,8 @@ def get_subcontent(
         category_name,
         page_size=page_size,
         cursor=cursor,
-        order=order,
+        # The API accepts only "Ascending"/"Descending" (anything else is a 400).
+        order={"asc": "Ascending", "desc": "Descending"}.get(order.lower(), order),
         workspace_id=workspace_id,
     )
     return {
