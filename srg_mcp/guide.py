@@ -12,8 +12,9 @@ the canonical one for connector users.
 from srg_mcp._app import mcp
 from mcp.types import ToolAnnotations
 
-SRGPLUS_GUIDE = """\
-# SRG+ connector guide
+# Raw string, so every backslash reaches agents exactly as written here (the
+# printf `\n` and trailing `\` in the shell snippet, `\|` in tables).
+SRGPLUS_GUIDE = r"""# SRG+ connector guide
 
 SRG+ is a content platform. ID model:
 `workspace → hub profiles (brands) → channels → categories → contents → assets`.
@@ -21,9 +22,11 @@ SRG+ is a content platform. ID model:
 Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
 
 ## Find your way around
-1. `list_workspaces()` — slim rows (id, name, hub_profile_count). One key may
-   span many workspaces (a personal `srgplus_u_` key sees all of yours). Use
-   `get_workspace(id)` only when you need full detail.
+1. `list_workspaces()` — slim rows (id, name) in one call. One key may span
+   many workspaces (a personal `srgplus_u_` key sees all of yours). A
+   workspace's brands come from `list_hub_profiles(workspace_id)`;
+   `get_workspace(workspace_id)`, with seats and subscription, is on the full
+   `/mcp` only.
 2. `list_hub_profiles(workspace_id)` — the brands in a workspace. Match by
    name/username client-side; filter, don't dump (there can be 100+).
 3. `list_channels(hub_profile_id, workspace_id)` then
@@ -97,7 +100,7 @@ survive later edits in the SRG+ apps, write this subset:
   | :----- | -------: |
   | Format | 8 frames |
   ```
-  A pipe inside a cell needs a backslash (`\\|`), also inside `code`. For a line
+  A pipe inside a cell needs a backslash (`\|`), also inside `code`. For a line
   break inside a cell use `<br>`. Name the columns instead of leaving an empty
   `| | |` header.
 - Code: fence with three backticks and a language (```json). A fence that is
@@ -172,7 +175,7 @@ The hosted server cannot read local paths and base64 does not scale (one
 300 KB JPEG is ~400K characters). The bytes go straight to storage instead:
 
 1. Collect size (and pixel size for images). macOS, for a folder of JPEGs:
-   ```
+   ```bash
    cd "<folder>"; for f in *.jpg; do printf '{"path":"%s","size":%s,"width":%s,"height":%s}\n' \
      "$PWD/$f" "$(stat -f%z "$f")" \
      "$(sips -g pixelWidth "$f" | awk '/pixelWidth/{print $2}')" \
