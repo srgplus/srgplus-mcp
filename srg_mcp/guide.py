@@ -76,6 +76,49 @@ data, different key: a missing `referenceIds` on read does NOT mean the write
 failed. To re-send a widget you read, map `references` → `referenceIds`
 `[{"$type":"Content"|"Asset","id":..}]`.
 
+## Text widget Markdown (the SRG+ standard)
+A Text widget's `content` is GitHub Flavored Markdown (the GFM spec in full:
+headings, lists, task lists, tables, code, quotes, links, images,
+strikethrough) plus one extension, `==highlight==`. SRG+ stores the string
+byte for byte. To render the same on web, iPhone, iPad, Mac and Android, and to
+survive later edits in the SRG+ apps, write this subset:
+
+- A blank line between blocks: before and after every heading, list, table,
+  code fence, quote and `---` rule. A `---` right under a line of text turns
+  that text into a heading, and a line right under a table becomes a row.
+- Sections with `##` and `###` (the content name is already the page title).
+- Inline: `*italic*`, `**bold**`, `~~strike~~`, `==highlight==`, `` `code` ``.
+  The `==` pair hugs its text: `==like this==` highlights, `a == b` does not.
+- Lists: `-` bullets, `1.` numbers, nest with 2 spaces (3 under `1.`). Tasks:
+  `- [ ] to do` and `- [x] done`.
+- Tables: a header row, a delimiter row, one row per line:
+  ```
+  | Field  | Value    |
+  | :----- | -------: |
+  | Format | 8 frames |
+  ```
+  A pipe inside a cell needs a backslash (`\\|`), also inside `code`. For a line
+  break inside a cell use `<br>`. Name the columns instead of leaving an empty
+  `| | |` header.
+- Code: fence with three backticks and a language (```json). A fence that is
+  never closed swallows the rest of the widget.
+- Links `[text](https://...)`, images `![alt](https://...)` with public https
+  URLs.
+- Real characters (`·`, `→`, `—`) instead of entities (`&middot;`, `&rarr;`,
+  `&mdash;`), and a normal space instead of `&nbsp;`.
+- A newline inside a paragraph shows as a line break; a blank line starts a new
+  paragraph. Don't end lines with spaces or a backslash.
+- Shown as plain text, so don't use them: raw HTML (except `<br>` in a table
+  cell), footnotes, math, emoji shortcodes (`:rocket:`), wiki links
+  (`[[page]]`), `> [!NOTE]` alerts.
+- Up to 20,000 characters per Text widget (5,000 in a hub-profile Text widget).
+  Split a long page into several Text widgets.
+
+Editing an existing Text widget: read it with `get_content_v2`, change only the
+part you mean to change, and send everything else back exactly as it was. Don't
+re-wrap lines, re-align tables, swap `*` for `_` or convert entities: people
+edit the same text in the SRG+ apps.
+
 ## Update safely
 `update_content(content_id, workspace_id, ...)` changes ONLY the fields you
 pass. Everything you omit — cover, main asset, channels, categories, body,
@@ -195,7 +238,8 @@ Core is archive-only (no hard delete; deletion stays manual in-app):
 )
 def get_srgplus_guide() -> str:
     """Return the full SRG+ how-to guide: navigation, content creation, the
-    exact widget shapes for the `context` body, safe-update rules, Featured
+    exact widget shapes for the `context` body, the Markdown standard for Text
+    widgets (GFM + ==highlight==), safe-update rules, Featured
     Assets / Featured Content with named sections (versions), asset upload,
     archive/restore, and common pitfalls.
 
