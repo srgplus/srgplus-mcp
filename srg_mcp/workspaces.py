@@ -15,9 +15,9 @@ def list_workspaces() -> list[dict]:
     """List all workspaces accessible with the current API key(s).
 
     Returns a SLIM row per workspace — id and name — which is all you need to
-    pick a workspace_id for other tools. For full details (seats, subscription,
-    hub profiles) call get_workspace(workspace_id); for a workspace's brands
-    call list_hub_profiles(workspace_id).
+    pick a workspace_id for other tools. For a workspace's brands call
+    list_hub_profiles(workspace_id). Full details (seats, subscription, hub
+    profiles) come from get_workspace(workspace_id), on the full /mcp only.
 
     A user-level key (srgplus_u_) returns every workspace it can reach; multiple
     keys are merged. The list comes from the single bulk call made when the key
