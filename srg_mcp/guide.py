@@ -80,9 +80,8 @@ failed. To re-send a widget you read, map `references` → `referenceIds`
 A Text widget's `content` is GitHub Flavored Markdown (the GFM spec in full:
 headings, lists, task lists, tables, code, quotes, links, images,
 strikethrough) plus one extension, `==highlight==`. SRG+ stores the string
-byte for byte and its editors keep what they cannot edit, so valid GFM is never
-lost. To render the same on web, iPhone, iPad, Mac and Android, write this
-subset:
+byte for byte. To render the same on web, iPhone, iPad, Mac and Android, and to
+survive later edits in the SRG+ apps, write this subset:
 
 - A blank line between blocks: before and after every heading, list, table,
   code fence, quote and `---` rule. A `---` right under a line of text turns
