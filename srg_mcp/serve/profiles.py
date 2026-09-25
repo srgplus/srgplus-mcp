@@ -9,9 +9,10 @@ set stays at ``/mcp`` — existing consumers are untouched.
 
 CORE selection: find things (workspaces → hub profiles → channels →
 content), search, read both content variants (v2 covers private-channel
-memberships), create/update content, upload an asset, attach to categories.
-Excluded on purpose: user/permission management, deletes, archives, moves,
-sections/subcontent, workspace actions, and the deprecated
+memberships), create/update content, upload an asset, attach to categories,
+fill a content's Featured Assets / Featured Content (named sections).
+Excluded on purpose: user/permission management, hard deletes, moves, the
+low-level collection subcontent tools, workspace actions, and the deprecated
 ``create_*_asset`` registrars.
 """
 
@@ -40,6 +41,13 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    # Featured Assets / Featured Content of a content item (the "More" menu),
+    # with named sections such as "Version 1" (SRGDEV-756)
+    "set_featured_assets",
+    "set_featured_contents",
+    "list_featured_sections",
+    "reorder_featured_sections",
+    "delete_featured_section",
     # Media from the user's computer (no base64) + covers + Drive (SRGDEV-741)
     "create_upload",
     "complete_upload",

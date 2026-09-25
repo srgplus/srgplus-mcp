@@ -26,6 +26,12 @@ Content body = the `context` list of widgets. Every widget needs a "$type": "Tex
 `referenceIds`:[{"$type":"Content"|"Asset","id":..}]). Widget keys are camelCase — snake_case
 (asset_id, hub_profile_id) is silently rejected as a 400. One malformed widget rejects the whole
 write; the error names the bad field. See the create_content/update_content tool docs for full shapes.
+Read back, a ContentWidget shows `references` (expanded objects) instead of `referenceIds` — same data.
+
+Featured Assets / Featured Content (a content's "More" menu, with named sections such as
+"Version 1"): write them with set_featured_assets / set_featured_contents (section_name=...),
+read them with list_featured_sections. update_content(categories=...) only changes a category's
+`options` and rejects references/sections.
 
 Pitfalls that cause real damage — read before writing:
 - update_content changes ONLY the fields you pass; everything you omit (cover, main asset,
