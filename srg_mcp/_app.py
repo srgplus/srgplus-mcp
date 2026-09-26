@@ -42,6 +42,10 @@ Pitfalls that cause real damage — read before writing:
   use it for partial edits. (update_content resolves the owning hub profile for you.)
   When others may edit the same content, pass expected_version (the `version` from
   get_content_v2): a stale write then fails with 409 instead of overwriting their edit.
+- Hub profiles (brand pages): edit with update_hub_profile — only passed fields change, but
+  `links` (like `context`) REPLACES the whole link list, so read get_hub_profile first and send
+  the full list back. Avatar/cover from the hub's own Drive: set_hub_avatar / set_hub_cover
+  (another hub's asset is refused). Sizes and the cover safe area: get_srgplus_guide().
 - Text `content` is GitHub Flavored Markdown plus ==highlight== (full rules: get_srgplus_guide).
   Leave a blank line before and after tables, lists and `---` rules, write a pipe inside a table
   cell as \\|, and when editing a Text widget send the parts you did not change back byte for byte
