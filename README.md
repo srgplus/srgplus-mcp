@@ -184,7 +184,7 @@ hosted HTTP (`X-API-Key` header).
 ## Available tools
 
 ### Hub Profiles
-`list_hub_profiles` · `list_managed_hub_profiles` · `get_hub_profile` · `get_hub_profile_by_username` · `filter_hub_profiles` · `create_hub_profile` · `update_hub_profile` · `archive_hub_profile` · `restore_hub_profile` · `delete_hub_profile` · `join_hub_profile` · `invite_to_hub_profile` · `list_invitations` · `update_invitation` · `delete_invitation` · `get_invitation_link` · `move_hub_profile_to_workspace` · `turn_on_hub_profile_community`
+`list_hub_profiles` · `list_managed_hub_profiles` · `get_hub_profile` · `get_hub_profile_by_username` · `filter_hub_profiles` · `create_hub_profile` · `update_hub_profile` · `set_hub_avatar` · `set_hub_cover` · `archive_hub_profile` · `restore_hub_profile` · `delete_hub_profile` · `join_hub_profile` · `invite_to_hub_profile` · `list_invitations` · `update_invitation` · `delete_invitation` · `get_invitation_link` · `move_hub_profile_to_workspace` · `turn_on_hub_profile_community`
 
 ### Channels
 `list_channels` · `get_channel` · `get_channel_by_name` · `create_channel` · `update_channel` · `archive_channel` · `delete_channel` · `create_category` · `update_category` · `archive_category` · `delete_category` · `get_category_by_slugs` · `create_section` · `update_section` · `delete_section`

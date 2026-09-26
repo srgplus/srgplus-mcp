@@ -10,7 +10,8 @@ set stays at ``/mcp`` — existing consumers are untouched.
 CORE selection: find things (workspaces → hub profiles → channels →
 content), search, read both content variants (v2 covers private-channel
 memberships), create/update content, upload an asset, attach to categories,
-fill a content's Featured Assets / Featured Content (named sections).
+fill a content's Featured Assets / Featured Content (named sections), read and
+edit a hub profile (bio, links, avatar, cover) with PATCH semantics.
 Excluded on purpose: user/permission management, hard deletes, moves, the
 low-level collection subcontent tools, workspace actions, and the deprecated
 ``create_*_asset`` registrars.
@@ -48,6 +49,11 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "list_featured_sections",
     "reorder_featured_sections",
     "delete_featured_section",
+    # Hub profile (brand page): read + PATCH edit, avatar/cover from Drive (SRGDEV-798)
+    "get_hub_profile",
+    "update_hub_profile",
+    "set_hub_avatar",
+    "set_hub_cover",
     # Media from the user's computer (no base64) + covers + Drive (SRGDEV-741)
     "create_upload",
     "complete_upload",

@@ -10,6 +10,7 @@ the canonical one for connector users.
 """
 
 from srg_mcp._app import mcp
+from srg_mcp.hub_profiles import HUB_IMAGE_RULES
 from mcp.types import ToolAnnotations
 
 # Raw string, so every backslash reaches agents exactly as written here (the
@@ -27,8 +28,10 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
    workspace's brands come from `list_hub_profiles(workspace_id)`;
    `get_workspace(workspace_id)`, with seats and subscription, is on the full
    `/mcp` only.
-2. `list_hub_profiles(workspace_id)` — the brands in a workspace. Match by
-   name/username client-side; filter, don't dump (there can be 100+).
+2. `list_hub_profiles(workspace_id, search=...)` — the brands in a workspace
+   as compact rows (id, name, user_name, has_avatar), 50 per page; pass the
+   returned `cursor` for more. Use `search` (name or username) instead of
+   paging through 100+ brands. `get_hub_profile` has the full profile.
 3. `list_channels(hub_profile_id, workspace_id)` then
    `get_channel(channel_id, workspace_id)` — the channel payload carries its
    categories WITH their ids. Category ids for attaching content come from here.
@@ -212,6 +215,36 @@ an empty record and are deprecated; don't use them to upload bytes.
 - `get_asset(asset_id, workspace_id)` → `url` is a signed download URL (~7 days)
   to verify a file. The Drive has no folders yet.
 
+## Set up a hub profile (the brand page srgplus.com/<user_name>)
+1. Read first: `get_hub_profile(hub_profile_id, workspace_id)` → name,
+   sub_name (line under the name), user_name, description (the bio),
+   primary_url (website), visibility, avatar, cover, links, buttons, `version`.
+2. Text fields: `update_hub_profile(hub_profile_id, workspace_id, bio=...,
+   sub_name=..., primary_url=...)`. Only the fields you pass change; the
+   avatar, cover, links, buttons, other widgets, visibility and user_name keep
+   their stored value. `""` clears sub_name / description / primary_url.
+   Limits: name and user_name 2-150, bio 10-1000, sub_name up to 150.
+   user_name is the URL slug (letters, digits, `-`, `_`, `.`; stored lowercased);
+   changing it changes the page address, so only do it when asked.
+3. Links: `update_hub_profile(..., links=[{"title": "Instagram", "url":
+   "https://instagram.com/brand"}, ...])`. Same rule as `context`: the list you
+   pass REPLACES the whole link list. To add one link, read `links` from
+   get_hub_profile, append, and send the full list back (keep each `id`).
+   Max 20 links, unique titles, 1-100 chars. Default `$type` is KnownLink (SRG+
+   fetches the site's icon); `platform` in the read shape is inferred from the
+   host and is display-only. `links=[]` removes the link list.
+4. Images from the Drive (preferred): upload with create_upload → script →
+   complete_upload (or pick from `list_drive_files(types=["Image"])`), then
+   `set_hub_avatar(hub_profile_id, asset_id, workspace_id)` and
+   `set_hub_cover(...)`. The asset must be in THE SAME hub's Drive (another
+   hub's asset → 404). They wait for a just-uploaded image and return the
+   stored width/height and URL. From a public URL instead:
+   `update_hub_profile(..., avatar_image="https://...", cover_image=...)`.
+5. Image sizes and safe area:
+<<HUB_IMAGE_RULES>>
+6. With several editors, pass `expected_version` (the `version` you read) to
+   every write: a stale write then fails with 409 and changes nothing.
+
 ## Archive / restore (reversible)
 Core is archive-only (no hard delete; deletion stays manual in-app):
 `archive_content`/`restore_content`, `archive_channel`/`restore_channel`,
@@ -231,6 +264,13 @@ Core is archive-only (no hard delete; deletion stays manual in-app):
 """
 
 
+# The image rules live next to the hub-profile tools; indent them into step 5.
+SRGPLUS_GUIDE = SRGPLUS_GUIDE.replace(
+    "<<HUB_IMAGE_RULES>>",
+    "\n".join("   " + line for line in HUB_IMAGE_RULES.splitlines()),
+)
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         title="Get SRG+ guide",
@@ -244,6 +284,7 @@ def get_srgplus_guide() -> str:
     exact widget shapes for the `context` body, the Markdown standard for Text
     widgets (GFM + ==highlight==), safe-update rules, Featured
     Assets / Featured Content with named sections (versions), asset upload,
+    setting up a hub profile (bio, links, avatar and cover sizes / safe area),
     archive/restore, and common pitfalls.
 
     Call this once before authoring or editing content if you are unsure of the
