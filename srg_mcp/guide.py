@@ -239,7 +239,8 @@ an empty record and are deprecated; don't use them to upload bytes.
    `set_hub_cover(...)`. The asset must be in THE SAME hub's Drive (another
    hub's asset → 404). They wait for a just-uploaded image and return the
    stored width/height and URL. From a public URL instead:
-   `update_hub_profile(..., avatar_image="https://...", cover_image=...)`.
+   `update_hub_profile(..., avatar_image="https://...", cover_image=...)`;
+   `avatar_image=""` / `cover_image=""` removes the image.
 5. Image sizes and safe area:
 <<HUB_IMAGE_RULES>>
 6. With several editors, pass `expected_version` (the `version` you read) to

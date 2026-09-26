@@ -253,6 +253,14 @@ def test_avatar_url_is_downloaded_first_then_uploaded_to_the_signed_url(api, mon
     assert out["updated_fields"] == ["avatar"]
 
 
+def test_empty_image_removes_it(api):
+    api.routes[("PATCH", f"/api/v1/hub-profiles/{HUB}")] = {"id": HUB, "version": 8}
+
+    hub_profiles.update_hub_profile(HUB, WS, cover_image="")
+
+    assert api.only("PATCH")["json"] == {"cover": {"extension": None, "generateSignedUrl": True}}
+
+
 def test_bad_image_url_writes_nothing(api, monkeypatch):
     def boom(src, exts):
         raise ValueError("not a supported cover image")

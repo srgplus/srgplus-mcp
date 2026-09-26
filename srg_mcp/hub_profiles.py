@@ -459,8 +459,8 @@ def update_hub_profile(
     buttons: REPLACES all action buttons (max 3), each
         {"title": "...", "logic": {"$type": "OpenLink", "url": "https://..."}}.
     avatar_image / cover_image: a public http(s) image URL; downloaded and
-        stored. For a file already in the hub's Drive use set_hub_avatar /
-        set_hub_cover instead (no download).
+        stored. "" removes the avatar / cover. For a file already in the
+        hub's Drive use set_hub_avatar / set_hub_cover instead (no download).
     expected_version: the `version` from get_hub_profile → 409 (nothing
         written) if someone changed the profile since.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
@@ -491,7 +491,9 @@ def update_hub_profile(
     # Download images BEFORE writing, so a bad URL fails with nothing changed.
     images: dict[str, _images.CoverImage] = {}
     for key, source in (("avatar", avatar_image), ("cover", cover_image)):
-        if source:
+        if source == "":
+            body[key] = {"extension": None, "generateSignedUrl": True}  # remove the image
+        elif source:
             images[key] = _images.load(source, _images.HUB_IMAGE_EXTENSIONS)
             body[key] = _upload_param(images[key])
     if not body:
