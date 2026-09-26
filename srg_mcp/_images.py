@@ -129,8 +129,17 @@ def _dimensions(data: bytes, extension: str) -> tuple[int, int] | None:
     return int(dims[0]), int(dims[1])
 
 
-def describe(data: bytes, source: str, content_type: str | None = None) -> CoverImage:
-    """Validate an image for use as a content cover and measure it."""
+# What every SRG+ client renders as a hub profile avatar / cover.
+HUB_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+
+
+def describe(
+    data: bytes,
+    source: str,
+    content_type: str | None = None,
+    extensions: set[str] = COVER_EXTENSIONS,
+) -> CoverImage:
+    """Validate an image (a content cover by default) and measure it."""
     if not data:
         raise ValueError(f"The image at {_redact(source)} is empty.")
     if len(data) > MAX_COVER_BYTES:
@@ -140,20 +149,21 @@ def describe(data: bytes, source: str, content_type: str | None = None) -> Cover
         )
     mime = (content_type or "").split(";")[0].strip().lower()
     extension = sniff_extension(data) or _suffix(source) or _MIME_TO_EXT.get(mime, "")
-    if extension not in COVER_EXTENSIONS:
+    if extension not in extensions:
+        allowed = ", ".join(sorted(e.upper() for e in extensions if e != "jpeg"))
         raise ValueError(
             f"The file at {_redact(source)} is not a supported cover image "
-            f"(detected type: {extension or 'unknown'}). Use JPEG, PNG, WEBP or HEIC."
+            f"(detected type: {extension or 'unknown'}). Use {allowed}."
         )
     width, height = _dimensions(data, extension) or (1, 1)
     return CoverImage(data=data, extension=extension, width=width, height=height)
 
 
-def load(source: str) -> CoverImage:
+def load(source: str, extensions: set[str] = COVER_EXTENSIONS) -> CoverImage:
     """Fetch an image from an http(s) URL (or, locally only, a file path)."""
     if source.startswith(("http://", "https://")):
         data, content_type = _download(source)
-        return describe(data, source, content_type)
+        return describe(data, source, content_type, extensions)
     if is_hosted():
         raise ValueError(
             "cover_image must be an http(s) URL: the hosted SRG+ server cannot "
@@ -164,7 +174,7 @@ def load(source: str) -> CoverImage:
     path = Path(source).expanduser()
     if not path.is_file():
         raise ValueError(f"No such image file: {path}")
-    return describe(path.read_bytes(), str(path))
+    return describe(path.read_bytes(), str(path), extensions=extensions)
 
 
 def _download(url: str) -> tuple[bytes, str | None]:
