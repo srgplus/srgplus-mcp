@@ -150,7 +150,7 @@ def _profile_out(data: dict) -> dict:
         "other_widgets": others,
         "workspace_id": data.get("workspaceId"),
         "drive_id": data.get("driveId"),
-        "created": data.get("created"),
+        "created": None if str(data.get("created") or "").startswith("0001-") else data.get("created"),
         "modified": data.get("modified"),
         "version": data.get("version"),
     }
