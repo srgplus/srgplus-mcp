@@ -23,11 +23,15 @@ PAGE = "65f000000000000000000p01"
 class FakeAPI:
     """Answers the few routes the tools use and records every call."""
 
-    def __init__(self, channels=None, references=None, contents=None, index=None):
+    def __init__(self, channels=None, references=None, contents=None, index=..., visitor=False):
         self.channels = channels if channels is not None else []
         self.references = references or []
         self.contents = contents or {}
-        self.index = index
+        # No index argument: a server with the index that names no memory page.
+        self.index = {"memoryContentId": None} if index is ... else index
+        # An API key on the routes without an auth policy: a visitor (401 on a private
+        # channel's listing, 403 on a Private content).
+        self.visitor = visitor
         self.calls: list[tuple] = []
         self.patch_conflicts = 0
 
@@ -40,9 +44,14 @@ class FakeAPI:
         if method == "GET" and path == f"/api/v1/channels/{HUB}":
             return self.channels
         if method == "GET" and path.endswith("/references"):
+            if self.visitor:
+                raise srg.exceptions.AuthenticationError({"title": "Unauthorized"}, _Response(401))
             return {"items": self.references}
         if method == "GET" and path.startswith("/api/v2/contents/"):
-            return self.contents[path.rsplit("/", 1)[1]]
+            content = self.contents[path.rsplit("/", 1)[1]]
+            if self.visitor and content.get("privacy") == "Private":
+                raise srg.exceptions.ForbiddenError({"title": "Forbidden"}, _Response(403))
+            return content
         if method == "PATCH" and path == f"/api/v1/contents/{PAGE}":
             if self.patch_conflicts:
                 self.patch_conflicts -= 1
@@ -99,7 +108,7 @@ def test_append_adds_a_dated_line_and_resends_everything_else_unchanged(api):
 
     result = brand_context.append_brand_memory(HUB, WS, "No emojis in captions", author="Claude")
 
-    method, path, body, params, headers = next(c for c in fake.calls if c[0] == "PATCH")
+    _method, _path, body, params, headers = next(c for c in fake.calls if c[0] == "PATCH")
     assert headers == {"If-Match": '"4"'}
     assert params == {"hubProfileId": HUB}
     written_text, written_media = body["context"]
@@ -132,7 +141,7 @@ def test_append_rereads_and_retries_after_a_concurrent_edit(api):
     assert [p[4]["If-Match"] for p in patches] == ['"7"', '"8"']
 
 
-def test_first_append_creates_the_private_agent_memory_page(api):
+def test_first_append_creates_a_preview_page_in_the_private_agent_channel(api):
     fake = api(FakeAPI(channels=[]))
 
     brand_context.append_brand_memory(HUB, WS, "first fact")
@@ -141,7 +150,7 @@ def test_first_append_creates_the_private_agent_memory_page(api):
     assert posts["/api/v1/channels"] == {"name": "Agent", "hubProfileId": HUB, "privacy": "Private"}
     assert posts[f"/api/v1/channels/{CHANNEL}/categories"]["notificationsEnabled"] is False
     content = posts["/api/v1/contents"]
-    assert content["privacy"] == "Private"
+    assert content["privacy"] == "Preview"
     assert content["channels"] == [{"channelId": CHANNEL, "categoryIds": [CATEGORY]}]
     metadata = next(c for c in fake.calls if c[1].endswith("/metadata"))
     assert metadata[2] == {"tags": ["brand-memory"]}
@@ -218,13 +227,45 @@ def test_brand_index_on_an_older_server_explains_the_fallback(api):
         brand_context.get_brand_index(HUB, WS)
 
 
-def test_a_key_without_a_user_gets_a_clear_explanation(api, monkeypatch):
-    def forbidden(workspace_id, method, path, **kwargs):
-        if method == "GET" and path == f"/api/v1/channels/{HUB}":
-            return _memory_channel()
-        raise srg.exceptions.ForbiddenError({"title": "Forbidden"}, _Response(403))
+def test_the_brand_index_finds_the_page_without_listing_the_private_channel(api):
+    text = {"$type": "Text", "id": "t1", "title": None, "content": "## Log"}
+    fake = api(FakeAPI(channels=_memory_channel(), index={"memoryContentId": PAGE}, visitor=True,
+                       contents={PAGE: {**_page([text]), "privacy": "Preview"}}))
 
-    monkeypatch.setattr(brand_context._raw, "call", forbidden)
+    brand_context.append_brand_memory(HUB, WS, "entry")
 
-    with pytest.raises(RuntimeError, match="personal SRG\\+ API key"):
+    assert not [c for c in fake.calls if c[1].endswith("/references")]
+    assert [c for c in fake.calls if c[0] == "PATCH"]
+
+
+def test_append_never_makes_a_second_page_when_the_category_cannot_be_listed(api):
+    fake = api(FakeAPI(channels=_memory_channel(), index={"memoryContentId": None}, visitor=True))
+
+    with pytest.raises(RuntimeError, match="brand-memory"):
+        brand_context.append_brand_memory(HUB, WS, "entry")
+    assert not [c for c in fake.calls if c[0] == "POST"]
+
+
+def test_reading_without_a_listable_category_reports_no_page(api):
+    api(FakeAPI(channels=_memory_channel(), index={"memoryContentId": None}, visitor=True))
+
+    assert brand_context.get_brand_memory(HUB, WS)["content_id"] is None
+
+
+def test_a_page_made_private_says_how_to_fix_it(api):
+    text = {"$type": "Text", "id": "t1", "title": None, "content": "## Log"}
+    api(FakeAPI(index={"memoryContentId": PAGE}, visitor=True,
+                contents={PAGE: {**_page([text]), "privacy": "Private"}}))
+
+    with pytest.raises(RuntimeError, match="Preview"):
         brand_context.get_brand_memory(HUB, WS)
+
+
+def test_memory_tools_do_nothing_on_a_server_without_the_brand_index(api):
+    fake = api(FakeAPI(channels=[], index=None))
+
+    with pytest.raises(RuntimeError, match="no brand index"):
+        brand_context.append_brand_memory(HUB, WS, "entry")
+    with pytest.raises(RuntimeError, match="no brand index"):
+        brand_context.get_brand_memory(HUB, WS)
+    assert [c[0] for c in fake.calls] == ["GET", "GET"]
