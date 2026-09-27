@@ -15,6 +15,10 @@ One key may span several workspaces; list them and pick the right one per call.
 Typical flow: list_workspaces → list_hub_profiles → list_channels → get_channel
 (returns the channel's categories WITH their ids) → search_contents / get_content.
 
+Starting work on a brand: get_brand_memory (decisions and notes the team and agents keep for
+it) and get_brand_index (the whole brand in one call: channels, categories, contents, files).
+Save lasting brand facts with append_brand_memory, not in your own notes.
+
 For the FULL how-to (recipes, exact widget shapes, safe-update rules, pitfalls)
 call `get_srgplus_guide()` — it ships with this connector, so you never need a
 separate skill or plugin installed. Pull it before authoring content if unsure.

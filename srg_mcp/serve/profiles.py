@@ -11,7 +11,8 @@ CORE selection: find things (workspaces → hub profiles → channels →
 content), search, read both content variants (v2 covers private-channel
 memberships), create/update content, upload an asset, attach to categories,
 fill a content's Featured Assets / Featured Content (named sections), read and
-edit a hub profile (bio, links, avatar, cover) with PATCH semantics.
+edit a hub profile (bio, links, avatar, cover) with PATCH semantics, and the
+brand context (index + memory page).
 Excluded on purpose: user/permission management, hard deletes, moves, the
 low-level collection subcontent tools, workspace actions, and the deprecated
 ``create_*_asset`` registrars.
@@ -61,6 +62,10 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "set_covers",
     "list_drive_files",
     "get_asset",
+    # Brand context: the whole brand in one call + the brand memory page (SRGDEV-824/825)
+    "get_brand_index",
+    "get_brand_memory",
+    "append_brand_memory",
     # Lifecycle — ARCHIVE ONLY in the core profile (reversible). Hard delete is
     # intentionally kept OUT of the agent connector for now (manual-only in the
     # app); the delete_* tools still exist on the full /mcp surface for admin use.
