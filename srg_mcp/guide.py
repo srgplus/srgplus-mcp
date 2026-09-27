@@ -250,6 +250,10 @@ an empty record and are deprecated; don't use them to upload bytes.
 Core is archive-only (no hard delete; deletion stays manual in-app):
 `archive_content`/`restore_content`, `archive_channel`/`restore_channel`,
 `archive_category`/`restore_category`, `archive_hub_profile`/`restore_hub_profile`.
+Permanently deleting a hub profile is app-only (the owner, signed in, deletes
+an archived hub in the SRG+ app); the API refuses any API key with 403, so no
+connector surface has a tool for it. Asked to delete a hub, offer to archive
+it and say the final delete is done by the owner in the app.
 
 ## Pitfalls — handle, don't abort
 - A 401/403 on an individual category or channel is NORMAL (per-item access

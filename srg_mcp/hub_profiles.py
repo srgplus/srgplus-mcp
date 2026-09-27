@@ -638,6 +638,9 @@ def set_hub_cover(
 def archive_hub_profile(hub_profile_id: str, workspace_id: str) -> dict | None:
     """Archive a hub profile (hidden from listings, content preserved).
 
+    This is how an agent removes a hub. Deleting it permanently is app-only:
+    the owner, signed in to the SRG+ app, deletes an archived hub there.
+
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     return get_client().hub_profiles.archive(hub_profile_id, workspace_id=workspace_id)
@@ -659,21 +662,9 @@ def restore_hub_profile(hub_profile_id: str, workspace_id: str) -> dict | None:
     return get_client().hub_profiles.restore(hub_profile_id, workspace_id=workspace_id)
 
 
-@mcp.tool(
-    annotations=ToolAnnotations(
-        title="Delete hub profile",
-        readOnlyHint=False,
-        destructiveHint=True,
-        openWorldHint=True,
-    )
-)
-def delete_hub_profile(hub_profile_id: str, workspace_id: str) -> str:
-    """Permanently delete a hub profile and all its data. Irreversible.
-
-    workspace_id: target workspace ID — get available IDs from list_workspaces()
-    """
-    get_client().hub_profiles.delete(hub_profile_id, workspace_id=workspace_id)
-    return "deleted"
+# No delete_hub_profile tool: DELETE /hub-profiles/{id} is a permanent delete
+# that accepts only a signed-in user (JWT) and refuses every API key with 403,
+# so from this connector it could only fail. Agents archive instead.
 
 
 @mcp.tool(

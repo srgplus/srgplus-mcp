@@ -70,10 +70,11 @@ async def test_full_mcp_unchanged_and_superset():
     assert EXPECTED_CORE <= names
     # Hard-delete tools exist on the full surface but are intentionally kept
     # OUT of the agent core profile (archive-only); deletes are manual-only.
-    for hard_delete in ("delete_channel", "delete_category", "delete_hub_profile",
-                        "delete_permission_group"):
+    for hard_delete in ("delete_channel", "delete_category", "delete_permission_group"):
         assert hard_delete in names, f"{hard_delete} should stay on full /mcp"
         assert hard_delete not in EXPECTED_CORE, f"{hard_delete} must NOT be in core"
+    # Permanent hub delete is JWT-only (API keys get 403): no tool on any surface.
+    assert "delete_hub_profile" not in names
     # Archive stays available in core (reversible).
     assert {"archive_content", "archive_channel", "archive_hub_profile"} <= EXPECTED_CORE
 
