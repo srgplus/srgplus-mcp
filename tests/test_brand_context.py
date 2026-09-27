@@ -23,11 +23,12 @@ PAGE = "65f000000000000000000p01"
 class FakeAPI:
     """Answers the few routes the tools use and records every call."""
 
-    def __init__(self, channels=None, references=None, contents=None, index=None, visitor=False):
+    def __init__(self, channels=None, references=None, contents=None, index=..., visitor=False):
         self.channels = channels if channels is not None else []
         self.references = references or []
         self.contents = contents or {}
-        self.index = index
+        # No index argument: a server with the index that names no memory page.
+        self.index = {"memoryContentId": None} if index is ... else index
         # An API key on the routes without an auth policy: a visitor (401 on a private
         # channel's listing, 403 on a Private content).
         self.visitor = visitor
@@ -258,3 +259,13 @@ def test_a_page_made_private_says_how_to_fix_it(api):
 
     with pytest.raises(RuntimeError, match="Preview"):
         brand_context.get_brand_memory(HUB, WS)
+
+
+def test_memory_tools_do_nothing_on_a_server_without_the_brand_index(api):
+    fake = api(FakeAPI(channels=[], index=None))
+
+    with pytest.raises(RuntimeError, match="no brand index"):
+        brand_context.append_brand_memory(HUB, WS, "entry")
+    with pytest.raises(RuntimeError, match="no brand index"):
+        brand_context.get_brand_memory(HUB, WS)
+    assert [c[0] for c in fake.calls] == ["GET", "GET"]

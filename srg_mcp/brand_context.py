@@ -200,13 +200,12 @@ def _find_memory(workspace_id: str, hub_profile_id: str, *, before_create: bool 
     else the tagged (or "Brand memory") content in Agent › Memory.
 
     The index runs as the key's user; the category listing doesn't (API keys
-    are visitors there, 401 on a private channel). When the listing can't be
-    read and a page is about to be created, raise instead of making a second one.
+    are visitors there, 401 on a private channel). So a server without the
+    index can't find the page reliably and nothing is read or created there
+    (the RuntimeError of ``_index`` goes up). When the listing can't be read
+    and a page is about to be created, raise instead of making a second one.
     """
-    try:
-        memory_id = _index(workspace_id, hub_profile_id).get("memoryContentId")
-    except RuntimeError:
-        memory_id = None
+    memory_id = _index(workspace_id, hub_profile_id).get("memoryContentId")
     if memory_id:
         return memory_id
     channel, category = _memory_place(workspace_id, hub_profile_id)
