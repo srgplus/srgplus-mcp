@@ -150,17 +150,17 @@ def get_brand_index(hub_profile_id: str, workspace_id: str, detail: str = "outli
 
 
 _NO_USER_KEY = (
-    "This API key can't read the brand memory: the page lives in a private channel, and SRG+ shows "
-    "private pages only to a key that acts as a person. Use a personal SRG+ API key (it starts with "
-    "srgplus_u_) for the connector, or read the page in the SRG+ app."
+    "SRG+ can't show the brand memory to an API key yet: the page is private, and the endpoints that "
+    "read a page body treat API keys like a visitor who is not signed in (SRGDEV-821). Read the page in "
+    "the SRG+ app or in the SRG+ Drive on the Mac (MEMORY.md)."
 )
 
 
 def _private(action: Any) -> Any:  # noqa: ANN401
-    """Run a read of the private memory page; a 403 there means the key has no user."""
+    """Run a read of the private memory page; a 401/403 there means API keys can't read it."""
     try:
         return action()
-    except srg.exceptions.ForbiddenError as exc:
+    except (srg.exceptions.ForbiddenError, srg.exceptions.AuthenticationError) as exc:
         raise RuntimeError(_NO_USER_KEY) from exc
 
 
@@ -230,8 +230,7 @@ def get_brand_memory(hub_profile_id: str, workspace_id: str) -> dict:
 
     Read it at the start of work on a brand. Returns {content_id, version,
     updated, text}; content_id is null when the brand has no memory page yet
-    (append_brand_memory creates it). Needs a personal API key (srgplus_u_):
-    the page is private.
+    (append_brand_memory creates it).
     """
     content_id = _find_memory(workspace_id, hub_profile_id)
     if content_id is None:

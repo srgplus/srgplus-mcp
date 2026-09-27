@@ -226,5 +226,5 @@ def test_a_key_without_a_user_gets_a_clear_explanation(api, monkeypatch):
 
     monkeypatch.setattr(brand_context._raw, "call", forbidden)
 
-    with pytest.raises(RuntimeError, match="personal SRG\\+ API key"):
+    with pytest.raises(RuntimeError, match="treat API keys like a visitor"):
         brand_context.get_brand_memory(HUB, WS)
