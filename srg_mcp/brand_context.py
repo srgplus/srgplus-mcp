@@ -8,6 +8,10 @@
   normal SRG+ content named "Brand memory" in the private channel "Agent",
   category "Memory", tagged ``brand-memory``. The team edits it in the SRG+ app;
   agents add dated entries. The SRG+ Drive on the Mac shows it as MEMORY.md.
+  The page is Preview, not Private (owner decision 2026-09-27): SRG+ reads a
+  page body for an API key as a visitor who isn't signed in, so a Private page
+  can't be read through the connector. The private channel keeps it off the
+  public brand page; anyone who has the page's id can read it.
 
 Writing the page goes through ``PATCH /api/v1/contents/{id}``, which REPLACES the
 whole widget list. So an append re-sends every widget exactly, and it only does
@@ -150,14 +154,21 @@ def get_brand_index(hub_profile_id: str, workspace_id: str, detail: str = "outli
 
 
 _NO_USER_KEY = (
-    "SRG+ can't show the brand memory to an API key yet: the page is private, and the endpoints that "
-    "read a page body treat API keys like a visitor who is not signed in (SRGDEV-821). Read the page in "
-    "the SRG+ app or in the SRG+ Drive on the Mac (MEMORY.md)."
+    "The brand memory page is set to Private, and SRG+ reads a page body for an API key as a visitor "
+    "who is not signed in (SRGDEV-821), so the connector can't read it. Set the \"Brand memory\" page "
+    "to Preview in the SRG+ app (it stays in the private Agent channel), or read it in the app or as "
+    "MEMORY.md in the SRG+ Drive on the Mac."
+)
+
+_UNLISTED = (
+    "Can't tell whether this brand already has a memory page: the brand index doesn't name one and the "
+    "private Agent › Memory category can't be listed with an API key. Tag the page \"brand-memory\" in "
+    "the SRG+ app, then try again."
 )
 
 
-def _private(action: Any) -> Any:  # noqa: ANN401
-    """Run a read of the private memory page; a 401/403 there means API keys can't read it."""
+def _readable(action: Any) -> Any:  # noqa: ANN401
+    """Read the memory page body; a 401/403 there means the page was made Private."""
     try:
         return action()
     except (srg.exceptions.ForbiddenError, srg.exceptions.AuthenticationError) as exc:
@@ -184,29 +195,44 @@ def _memory_place(workspace_id: str, hub_profile_id: str) -> tuple[dict | None, 
     return channel, category
 
 
-def _find_memory(workspace_id: str, hub_profile_id: str) -> str | None:
-    """The memory page's content id: the tagged content in Agent › Memory, or
-    one named "Brand memory" there, else what the brand index reports."""
+def _find_memory(workspace_id: str, hub_profile_id: str, *, before_create: bool = False) -> str | None:
+    """The memory page's content id: the tagged content the brand index names,
+    else the tagged (or "Brand memory") content in Agent › Memory.
+
+    The index runs as the key's user; the category listing doesn't (API keys
+    are visitors there, 401 on a private channel). When the listing can't be
+    read and a page is about to be created, raise instead of making a second one.
+    """
+    try:
+        memory_id = _index(workspace_id, hub_profile_id).get("memoryContentId")
+    except RuntimeError:
+        memory_id = None
+    if memory_id:
+        return memory_id
     channel, category = _memory_place(workspace_id, hub_profile_id)
-    if channel is not None and category is not None:
-        page = _private(lambda: _raw.call(
+    if channel is None or category is None:
+        return None
+    try:
+        page = _raw.call(
             workspace_id,
             "GET",
             f"/api/v1/channels/{channel['id']}/{category['id']}/references",
             params={"PageSize": "50", "Order": "Ascending"},
-        )) or {}
-        items = page.get("items") or []
-        for item in items:
-            content = _private(lambda: _raw.call(workspace_id, "GET", f"/api/v2/contents/{item['id']}")) or {}
-            if any(_same(tag, MEMORY_TAG) for tag in content.get("tags") or []):
-                return content.get("id") or item["id"]
-        named = next((i for i in items if _same(i.get("name"), MEMORY_TITLE)), None)
-        if named is not None:
-            return named["id"]
-    try:
-        return _index(workspace_id, hub_profile_id).get("memoryContentId")
-    except RuntimeError:
+        ) or {}
+    except (srg.exceptions.ForbiddenError, srg.exceptions.AuthenticationError) as exc:
+        if before_create:
+            raise RuntimeError(_UNLISTED) from exc
         return None
+    items = page.get("items") or []
+    for item in items:
+        try:
+            content = _raw.call(workspace_id, "GET", f"/api/v2/contents/{item['id']}") or {}
+        except (srg.exceptions.ForbiddenError, srg.exceptions.AuthenticationError):
+            continue
+        if any(_same(tag, MEMORY_TAG) for tag in content.get("tags") or []):
+            return content.get("id") or item["id"]
+    named = next((i for i in items if _same(i.get("name"), MEMORY_TITLE)), None)
+    return named["id"] if named is not None else None
 
 
 def _text(content: dict) -> str:
@@ -226,7 +252,7 @@ def _text(content: dict) -> str:
 def get_brand_memory(hub_profile_id: str, workspace_id: str) -> dict:
     """Read the brand's memory: decisions, notes and context that the team and
     agents keep for this brand (the "Brand memory" page in the private "Agent"
-    channel, category "Memory").
+    channel, category "Memory"; the page itself is Preview).
 
     Read it at the start of work on a brand. Returns {content_id, version,
     updated, text}; content_id is null when the brand has no memory page yet
@@ -236,7 +262,7 @@ def get_brand_memory(hub_profile_id: str, workspace_id: str) -> dict:
     if content_id is None:
         return {"content_id": None, "version": None, "updated": None, "text": "",
                 "note": "No memory page yet. append_brand_memory creates it on first use."}
-    content = _private(lambda: _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}")) or {}
+    content = _readable(lambda: _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}")) or {}
     return {
         "content_id": content_id,
         "version": content.get("version"),
@@ -308,7 +334,7 @@ def _retry_forbidden(action: Any, attempts: int = 5) -> Any:  # noqa: ANN401
 
 
 def _create_memory(workspace_id: str, hub_profile_id: str) -> str:
-    """Agent channel (Private) › Memory category › "Brand memory" page, tagged."""
+    """Agent channel (Private) › Memory category › "Brand memory" page (Preview), tagged."""
     channel, category = _memory_place(workspace_id, hub_profile_id)
     if channel is None:
         try:
@@ -340,7 +366,7 @@ def _create_memory(workspace_id: str, hub_profile_id: str) -> str:
         json={
             "name": MEMORY_TITLE,
             "hubProfileId": hub_profile_id,
-            "privacy": "Private",
+            "privacy": "Preview",
             "channels": [{"channelId": channel["id"], "categoryIds": [category_id]}],
             "context": [{
                 "$type": "Text",
@@ -376,7 +402,8 @@ def append_brand_memory(hub_profile_id: str, workspace_id: str, text: str, autho
     ("covers for Reels are 4:5"), preferences, contacts, recurring context. Not
     for task progress or scratch notes. On first use it creates the page: a
     private channel "Agent", category "Memory", content "Brand memory" (the
-    whole brand team can read it).
+    whole brand team can read it; the page is Preview so the connector can
+    read it, which also means anyone with its id can). Never put secrets in it.
 
     text: the entry, plain Markdown; the first line is the summary.
     author: who is writing, e.g. "Claude (video editor)"; default "agent".
@@ -385,10 +412,11 @@ def append_brand_memory(hub_profile_id: str, workspace_id: str, text: str, autho
     if not text or not text.strip():
         raise ValueError("text is empty.")
     entry = _entry(text, author)
-    content_id = _find_memory(workspace_id, hub_profile_id) or _create_memory(workspace_id, hub_profile_id)
+    content_id = (_find_memory(workspace_id, hub_profile_id, before_create=True)
+                  or _create_memory(workspace_id, hub_profile_id))
 
     for attempt in range(_CONFLICT_RETRIES):
-        content = _private(lambda: _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}")) or {}
+        content = _readable(lambda: _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}")) or {}
         widgets = _append([_to_write(w) for w in content.get("context") or []], entry)
         try:
             _raw.call(
