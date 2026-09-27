@@ -167,7 +167,7 @@ _UNLISTED = (
 )
 
 
-def _readable(action: Any) -> Any:  # noqa: ANN401
+def _readable(action: Any) -> Any:
     """Read the memory page body; a 401/403 there means the page was made Private."""
     try:
         return action()
@@ -295,7 +295,7 @@ def _to_write(widget: dict) -> dict:
 
 
 def _entry(text: str, author: str | None) -> str:
-    today = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
+    today = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%d")
     first, *rest = text.strip().splitlines()
     lines = [f"- {today} · {(author or 'agent').strip()} · {first.strip()}"]
     lines += [f"  {line}" if line.strip() else "" for line in rest]
@@ -321,7 +321,7 @@ def _append(widgets: list[dict], entry: str) -> list[dict]:
     return [*widgets, {"$type": "Text", "id": _new_widget_id(), "title": None, "content": entry}]
 
 
-def _retry_forbidden(action: Any, attempts: int = 5) -> Any:  # noqa: ANN401
+def _retry_forbidden(action: Any, attempts: int = 5) -> Any:
     """A channel made a moment ago answers 403 until its permissions are copied."""
     for attempt in range(attempts):
         try:

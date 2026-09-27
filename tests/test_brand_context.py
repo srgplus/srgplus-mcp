@@ -107,7 +107,7 @@ def test_append_adds_a_dated_line_and_resends_everything_else_unchanged(api):
 
     result = brand_context.append_brand_memory(HUB, WS, "No emojis in captions", author="Claude")
 
-    method, path, body, params, headers = next(c for c in fake.calls if c[0] == "PATCH")
+    _method, _path, body, params, headers = next(c for c in fake.calls if c[0] == "PATCH")
     assert headers == {"If-Match": '"4"'}
     assert params == {"hubProfileId": HUB}
     written_text, written_media = body["context"]
