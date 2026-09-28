@@ -64,6 +64,10 @@ Pitfalls that cause real damage — read before writing:
   → run the script locally → complete_upload → set_cover / set_covers (many at once). No base64.
   upload_asset is only for a public source_url or a tiny base64 file. The create_*_asset tools
   only register an empty record and are deprecated — do not use them to upload bytes.
+- Removing Drive files: archive_drive_files (to the bin, reversible; restore_drive_files undoes
+  it) then delete_drive_files (permanent, frees storage; only archived files, or pass
+  archive_first=True for one step). list_drive_files(archived=True) lists the bin. Confirm the
+  exact file list with the user before deleting. Covers set from Drive images are copies and stay.
 
 "No workspaces found for this API key" means the key was revoked or is invalid — issue a new
 one in SRG+ Settings → API Keys, do not retry.

@@ -39,6 +39,9 @@ EXPECTED_CORE = {
     "set_covers",
     "list_drive_files",
     "get_asset",
+    "archive_drive_files",
+    "restore_drive_files",
+    "delete_drive_files",
     "get_brand_index",
     "get_brand_memory",
     "append_brand_memory",
@@ -74,8 +77,9 @@ async def test_full_mcp_unchanged_and_superset():
     names = {t.name for t in await mcp.list_tools()}
     assert len(names) >= 90  # full surface still loaded
     assert EXPECTED_CORE <= names
-    # Hard-delete tools exist on the full surface but are intentionally kept
-    # OUT of the agent core profile (archive-only); deletes are manual-only.
+    # Hard-delete tools for structure exist on the full surface but are kept
+    # OUT of the agent core profile (archive-only); only Drive files can be
+    # deleted from core (delete_drive_files).
     for hard_delete in ("delete_channel", "delete_category", "delete_permission_group"):
         assert hard_delete in names, f"{hard_delete} should stay on full /mcp"
         assert hard_delete not in EXPECTED_CORE, f"{hard_delete} must NOT be in core"

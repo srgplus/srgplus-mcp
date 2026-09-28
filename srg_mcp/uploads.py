@@ -1,4 +1,5 @@
-"""Direct uploads from the agent's computer, covers from Drive, Drive listing.
+"""Direct uploads from the agent's computer, covers from Drive, Drive listing
+and Drive clean-up (archive / restore / permanent delete).
 
 The hosted server cannot read the user's files, and base64 through the model
 context does not scale (one 300 KB JPEG is ~400K characters). So the bytes
@@ -536,6 +537,8 @@ def _drive_row(item: dict) -> dict:
         row["width"], row["height"] = item.get("width"), item.get("height")
     if item.get("status"):
         row["status"] = item.get("status")
+    if item.get("archived"):
+        row["archived"] = True
     return row
 
 
@@ -554,6 +557,7 @@ def list_drive_files(
     search: str | None = None,
     page_size: int = 50,
     cursor: str | None = None,
+    archived: bool = False,
 ) -> dict:
     """List the files in a hub's Drive as compact rows: id, name, type,
     extension, size (bytes), width/height (images), status (videos).
@@ -563,13 +567,16 @@ def list_drive_files(
     search: optional keyword (matches names); without it the list is paged
         with `cursor` (pass the returned cursor for the next page).
     workspace_id: target workspace ID — get available IDs from list_workspaces()
+    archived: True lists the Drive bin (archived files) instead, e.g. to
+        find what to restore_drive_files or delete_drive_files. Paged only
+        (ignores `search`).
     A file appears a few seconds after complete_upload. The Drive has no
     folders. For a file's signed download URL (valid ~7 days) call get_asset.
     """
     bad = [t for t in (types or []) if t not in _DRIVE_TYPES]
     if bad:
         raise ValueError(f"Unknown type(s) {bad}; use {list(_DRIVE_TYPES)}.")
-    if search:
+    if search and not archived:
         data = _raw.call(
             workspace_id,
             "POST",
@@ -581,7 +588,7 @@ def list_drive_files(
 
     body: dict = {
         "pageSize": max(1, min(page_size, 200)),
-        "onlyArchived": False,
+        "onlyArchived": archived,
         "excludeCollections": [],
         "excludeAssets": [],
         "type": types or [],
@@ -595,3 +602,141 @@ def list_drive_files(
         "items": [_drive_row(i) for i in data.get("items") or []],
         "cursor": data.get("cursor"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Drive clean-up: archive (to the bin, reversible) → restore, or permanent delete
+# ---------------------------------------------------------------------------
+
+# A Drive file's asset id IS its Drive node id, so these call the Drive
+# service's /nodes endpoints directly. Permanent delete only accepts files that
+# are already archived (in the bin), same as the app.
+_NODE_BATCH_LIMIT = 200
+
+
+def _check_ids(asset_ids: list[str]) -> list[str]:
+    ids = list(dict.fromkeys(i for i in asset_ids if i))
+    if not ids:
+        raise ValueError("Pass at least one asset id (from list_drive_files).")
+    if len(ids) > _NODE_BATCH_LIMIT:
+        raise ValueError(
+            f"At most {_NODE_BATCH_LIMIT} files per call; split the list."
+        )
+    return ids
+
+
+def _node_rows(results: list[dict] | None) -> list[dict]:
+    rows = []
+    for r in results or []:
+        row = {"asset_id": r.get("nodeId"), "ok": bool(r.get("success"))}
+        if r.get("error"):
+            row["error"] = r.get("error")
+        rows.append(row)
+    return rows
+
+
+def _summary(rows: list[dict], done_key: str) -> dict:
+    ok = sum(1 for r in rows if r["ok"])
+    return {"results": rows, done_key: ok, "failed": len(rows) - ok}
+
+
+def _bulk_archive(workspace_id: str, ids: list[str]) -> list[dict]:
+    data = _raw.call(
+        workspace_id, "POST", "/api/v1/nodes/bulk-archive", json={"nodeIds": ids}
+    )
+    return _node_rows(data if isinstance(data, list) else [])
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Archive Drive files (move to bin)",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+def archive_drive_files(asset_ids: list[str], workspace_id: str) -> dict:
+    """Move Drive files to the bin (archive). Reversible: restore_drive_files
+    brings them back; delete_drive_files removes them for good.
+
+    asset_ids: Drive asset ids (from list_drive_files / upload tools), up to
+        200 per call. Each file is handled on its own: one it cannot archive
+        (no edit rights, not found, already archived) is reported as failed
+        and the rest still go through.
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Covers set from a Drive image are separate copies and stay. A file used as
+    a Media widget or in Featured Assets stops showing there while archived.
+    Returns {"results": [{"asset_id", "ok", "error"?}], "archived", "failed"}.
+    """
+    rows = _bulk_archive(workspace_id, _check_ids(asset_ids))
+    return _summary(rows, "archived")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Restore archived Drive files",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+def restore_drive_files(asset_ids: list[str], workspace_id: str) -> dict:
+    """Bring archived Drive files back out of the bin.
+
+    asset_ids: ids of archived files (list_drive_files(archived=True)), up to
+        200 per call; failures don't stop the batch.
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Returns {"results": [{"asset_id", "ok", "error"?}], "restored", "failed"}.
+    """
+    ids = _check_ids(asset_ids)
+
+    def one(node_id: str) -> dict:
+        try:
+            _raw.call(workspace_id, "POST", f"/api/v1/nodes/{node_id}/restore")
+        except srg.exceptions.SRGError as exc:
+            return {"asset_id": node_id, "ok": False, "error": exc.message}
+        return {"asset_id": node_id, "ok": True}
+
+    return _summary(_parallel(one, ids), "restored")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Permanently delete Drive files",
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
+)
+def delete_drive_files(
+    asset_ids: list[str], workspace_id: str, archive_first: bool = False
+) -> dict:
+    """PERMANENTLY delete Drive files and free their storage. Cannot be undone.
+
+    Two ways, same result as the app:
+    - Two steps (safer): archive_drive_files first, check, then call this with
+      the same ids. Only files already in the bin are deleted; a file that is
+      not archived fails with "not archived" and is kept.
+    - One step: archive_first=True archives and then deletes in this call
+      (for files the user clearly asked to remove for good).
+    asset_ids: Drive asset ids, up to 200 per call; failures don't stop the
+        batch. Confirm the exact list with the user before calling.
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Covers set from a Drive image are copies and stay. Media widgets and
+    Featured Assets that pointed at a deleted file lose it.
+    Returns {"results": [{"asset_id", "ok", "error"?}], "deleted", "failed",
+    "bytes_freed"}.
+    """
+    ids = _check_ids(asset_ids)
+    if archive_first:
+        # An "already archived" failure here is fine: delete handles it next.
+        _bulk_archive(workspace_id, ids)
+    data = _raw.call(
+        workspace_id, "POST", "/api/v1/nodes/bulk-delete", json={"nodeIds": ids}
+    ) or {}
+    out = _summary(_node_rows(data.get("results")), "deleted")
+    out["bytes_freed"] = data.get("bytesFreed") or 0
+    return out
