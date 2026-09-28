@@ -85,6 +85,12 @@ def test_guide_workspace_advice_matches_the_tools():
     )
 
 
+def test_guide_says_where_archived_hubs_went():
+    text = " ".join(SRGPLUS_GUIDE.split())  # immune to re-wrapping
+    assert "Archived hubs are left out; `include_archived=True` lists them too" in text
+    assert "Archived hubs and channels drop out of `list_hub_profiles` / `list_channels`" in text
+
+
 def test_guide_new_hub_recipe_is_private_and_core_only():
     text = " ".join(SRGPLUS_GUIDE.split())  # immune to re-wrapping
     assert "## New hub with channels and categories" in SRGPLUS_GUIDE

@@ -22,7 +22,8 @@ class _Api:
 
     def __call__(self, workspace_id, method, path, *, json=None, params=None, headers=None):
         self.calls.append(
-            {"ws": workspace_id, "method": method, "path": path, "json": json, "headers": headers}
+            {"ws": workspace_id, "method": method, "path": path, "json": json,
+             "params": params, "headers": headers}
         )
         answer = self.routes.get((method, path))
         if callable(answer):
@@ -124,6 +125,57 @@ def test_list_search_matches_name_or_username(monkeypatch):
 
     assert [r["id"] for r in hub_profiles.list_hub_profiles(WS, search="REBEL")["items"]] == ["z"]
     assert [r["id"] for r in hub_profiles.list_hub_profiles(WS, search="rstud")["items"]] == ["z"]
+
+
+# SRGDEV-851: archived hubs came back from the workspace list with nothing
+# marking them. The backend now leaves them out unless includeArchived=true and
+# marks each row with isArchived.
+ARCHIVED_ROWS = _rows(2) + [
+    {"id": "old", "name": "Old Brand", "userName": "old-brand", "avatar": None, "isArchived": True}
+]
+
+
+def test_list_leaves_archived_hubs_out_by_default(monkeypatch):
+    rows = [dict(r, isArchived=False) for r in ARCHIVED_ROWS[:2]] + ARCHIVED_ROWS[2:]
+    api = _Api({("GET", f"/api/v1/workspaces/{WS}/hub-profiles"): rows})
+    monkeypatch.setattr(hub_profiles._raw, "call", api)
+
+    page = hub_profiles.list_hub_profiles(WS)
+
+    # Nothing extra asked of the backend, and a marked row it still sends is dropped.
+    assert api.only("GET")["params"] is None
+    assert [r["id"] for r in page["items"]] == ["h0", "h1"]
+    assert page["total"] == 2
+    assert all("archived" not in r for r in page["items"])
+
+
+def test_list_include_archived_asks_for_them_and_marks_them(monkeypatch):
+    api = _Api({("GET", f"/api/v1/workspaces/{WS}/hub-profiles"): ARCHIVED_ROWS})
+    monkeypatch.setattr(hub_profiles._raw, "call", api)
+
+    page = hub_profiles.list_hub_profiles(WS, include_archived=True)
+
+    assert api.only("GET")["params"] == {"includeArchived": "true"}
+    assert page["total"] == 3
+    assert page["items"][2] == {
+        "id": "old", "name": "Old Brand", "user_name": "old-brand", "has_avatar": False, "archived": True
+    }
+    assert "archived" not in page["items"][0]
+
+
+def test_list_search_includes_archived_matches_only_when_asked(monkeypatch):
+    api = _Api({("GET", f"/api/v1/workspaces/{WS}/hub-profiles"): ARCHIVED_ROWS})
+    monkeypatch.setattr(hub_profiles._raw, "call", api)
+
+    assert hub_profiles.list_hub_profiles(WS, search="old")["items"] == []
+    assert [r["id"] for r in hub_profiles.list_hub_profiles(WS, search="old", include_archived=True)["items"]] == ["old"]
+
+
+def test_archive_docs_point_to_include_archived():
+    # The old docstring said "hidden from listings", which API keys did not get.
+    assert "hidden from listings" not in hub_profiles.archive_hub_profile.__doc__
+    assert "list_hub_profiles(include_archived=True)" in hub_profiles.archive_hub_profile.__doc__
+    assert "include_archived=True" in hub_profiles.restore_hub_profile.__doc__
 
 
 # ---- get ---------------------------------------------------------------------
