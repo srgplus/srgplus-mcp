@@ -378,10 +378,12 @@ def create_hub_profile(
     widgets: list[dict] | None = None,
     buttons: list[dict] | None = None,
 ) -> dict:
-    """Create a new hub profile in a workspace.
+    """Create a new hub profile in a workspace. The result's `id` is the new hub's ID.
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
-    availability_level: "Public" (default) or "Private"
+    user_name: the URL slug (srgplus.com/<user_name>), unique across SRG+
+    availability_level: "Public" (default, anyone can open the page) or
+        "Private" (members only); pass "Private" for an internal hub
     primary_url: optional external URL shown on the profile
     app_clip_on: enable iOS App Clip
     widgets: profile widget configuration objects

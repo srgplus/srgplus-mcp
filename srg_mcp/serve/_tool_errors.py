@@ -1,6 +1,6 @@
 """Uniform error handling for tool calls on the hosted server.
 
-Without this, an SDK/httpx exception inside any of the ~98 tools reaches the
+Without this, an SDK/httpx exception inside any tool reaches the
 MCP client as an opaque exception string and leaves no server-side trace of
 which tool failed, with what status, for which key. ``install_tool_error_wrapper``
 wraps every registered tool function so that failures:
@@ -49,12 +49,23 @@ _STATUS_HINTS = {
     429: "Rate limited — wait a moment and retry.",
 }
 
+# A create whose name is taken (channel/category 409, hub user_name 400) is not
+# an edit conflict: retrying the same create can never succeed (SRGDEV-850).
+_ALREADY_EXISTS_HINT = (
+    "It already exists, so don't create it again: look up its id "
+    "(list_hub_profiles(search=...), list_channels, get_channel) and reuse it, "
+    "or pick another name."
+)
+
 
 def _format_client_message(tool_name: str, exc: Exception) -> tuple[str, Any] | None:
     """Return (message, status) for SRG+/network errors, None for the rest."""
     if isinstance(exc, srg.exceptions.APIStatusError):
         status = exc.status_code
-        hint = _STATUS_HINTS.get(status, "")
+        if "already exist" in exc.message.lower():
+            hint = _ALREADY_EXISTS_HINT
+        else:
+            hint = _STATUS_HINTS.get(status, "")
         message = f"SRG+ API error ({status}) in {tool_name}: {exc.message}"
         return (f"{message}. {hint}".strip() if hint else message), status
     if isinstance(exc, httpx.TimeoutException):

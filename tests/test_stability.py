@@ -101,6 +101,26 @@ def test_format_api_status_error_includes_hint():
     assert "revoked" in message  # actionable hint
 
 
+@pytest.mark.parametrize(
+    ("cls", "status", "detail"),
+    [
+        (srg.exceptions.ConflictError, 409, "Channel with name Role is already exists"),
+        (srg.exceptions.BadRequestError, 400, "Hub profile with user name demo is already exists"),
+    ],
+)
+def test_format_already_exists_says_reuse_not_retry(cls, status, detail):
+    message, got = _format_client_message("create_channel", _status_error(cls, status, detail))
+    assert got == status
+    assert "don't create it again" in message
+    assert "retry" not in message  # the 409 edit-conflict hint would say retry
+
+
+def test_format_conflict_keeps_the_version_hint():
+    exc = _status_error(srg.exceptions.ConflictError, 409, "Version mismatch")
+    message, _ = _format_client_message("update_content", exc)
+    assert "re-apply your change" in message
+
+
 def test_format_timeout():
     message, status = _format_client_message(
         "upload_asset", httpx.ReadTimeout("boom")

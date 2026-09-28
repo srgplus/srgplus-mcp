@@ -1,21 +1,25 @@
 """Tool profiles for the hosted server.
 
-The full server exposes ~98 tools. That is the right surface for power
-integrations, but too wide for everyday agent work: every client pays for
-every tool schema on every session, and the wide surface mixes daily content
-work with destructive admin operations. The CORE profile is the curated
-~10-tool surface for daily content work, served at ``/mcp/core``. The full
-set stays at ``/mcp`` — existing consumers are untouched.
+The full server exposes every tool (100+). That is the right surface for
+power integrations, but too wide for everyday agent work: every client pays
+for every tool schema on every session, and the wide surface mixes daily
+content work with destructive admin operations. The CORE profile is the
+curated daily-work subset in ``CORE_TOOL_NAMES`` (``/health`` reports its
+size as ``core_tool_count``), served at ``/mcp/core`` and on ``POST /``, the
+public connector address. The full set stays at ``/mcp``; existing consumers
+are untouched.
 
 CORE selection: find things (workspaces → hub profiles → channels →
 content), search, read both content variants (v2 covers private-channel
 memberships), create/update content, upload an asset, attach to categories,
 fill a content's Featured Assets / Featured Content (named sections), read and
-edit a hub profile (bio, links, avatar, cover) with PATCH semantics, and the
-brand context (index + memory page).
+edit a hub profile (bio, links, avatar, cover) with PATCH semantics, create a
+new hub with its channels and categories, the brand context (index + memory
+page), and reversible archive/restore.
 Excluded on purpose: user/permission management, hard deletes, moves, the
-low-level collection subcontent tools, workspace actions, and the deprecated
-``create_*_asset`` registrars.
+low-level collection subcontent tools, workspace actions, the full-replace
+``update_channel`` / ``update_category``, and the deprecated ``create_*_asset``
+registrars.
 """
 
 from __future__ import annotations
@@ -55,6 +59,15 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "update_hub_profile",
     "set_hub_avatar",
     "set_hub_cover",
+    # Structure: a new hub, then its channels, then their categories (SRGDEV-850).
+    # CREATE ONLY. update_channel / update_category stay on the full /mcp until
+    # they keep the fields a caller leaves out: the backend PUT replaces the
+    # whole object (a category's isPinned / notificationsEnabled reset to the
+    # defaults; a channel's categories list must name every category, archived
+    # ones included).
+    "create_hub_profile",
+    "create_channel",
+    "create_category",
     # Media from the user's computer (no base64) + covers + Drive (SRGDEV-741)
     "create_upload",
     "complete_upload",

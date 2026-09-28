@@ -30,6 +30,9 @@ EXPECTED_CORE = {
     "update_hub_profile",
     "set_hub_avatar",
     "set_hub_cover",
+    "create_hub_profile",
+    "create_channel",
+    "create_category",
     "create_upload",
     "complete_upload",
     "set_cover",
@@ -80,6 +83,11 @@ async def test_full_mcp_unchanged_and_superset():
     assert "delete_hub_profile" not in names
     # Archive stays available in core (reversible).
     assert {"archive_content", "archive_channel", "archive_hub_profile"} <= EXPECTED_CORE
+    # Channel/category updates are a full replace on the backend (omitted
+    # fields reset), so core only CREATES structure until they keep them.
+    for full_replace in ("update_channel", "update_category"):
+        assert full_replace in names, f"{full_replace} should stay on full /mcp"
+        assert full_replace not in EXPECTED_CORE, f"{full_replace} must NOT be in core"
 
 
 def test_core_tools_share_wrapped_functions():
