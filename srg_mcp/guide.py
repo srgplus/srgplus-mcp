@@ -53,6 +53,9 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
    category_ids=[...], workspace_id)`. A placement needs a CATEGORY, so passing
    `channels=[channel_id]` alone at create often does NOT stick (saved
    channels:[]) — use add_content_to_categories to be sure.
+   To take it out of one category: `remove_content_from_categories(content_id,
+   channel_id, category_ids=[...], workspace_id)`. Only those categories lose
+   it; every other placement stays. Don't reset all placements and re-add.
 3. `create_content` returns a TRUNCATED echo of the body — verify the real
    persisted widgets with `get_content_v2`.
 

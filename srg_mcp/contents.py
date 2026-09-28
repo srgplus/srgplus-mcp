@@ -612,7 +612,9 @@ def remove_content_from_categories(
 ) -> str:
     """Remove a content item from one or more channel categories.
 
-    The content item itself is not deleted.
+    Only the listed categories lose it: its other categories and channels,
+    and the content item itself, stay as they are. Use this instead of
+    resetting all placements with update_content(channels=...).
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     content_id:   ID of the content item
     channel_id:   ID of the channel
@@ -620,6 +622,8 @@ def remove_content_from_categories(
     """
     from srg.schemas.content import ContentChannelUpsert
 
+    if not category_ids:
+        raise ValueError("Pass at least one category id (from get_channel).")
     get_client().contents.remove_from_categories(
         content_id,
         channels_categories=[

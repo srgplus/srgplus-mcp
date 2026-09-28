@@ -64,6 +64,8 @@ Pitfalls that cause real damage — read before writing:
   → run the script locally → complete_upload → set_cover / set_covers (many at once). No base64.
   upload_asset is only for a public source_url or a tiny base64 file. The create_*_asset tools
   only register an empty record and are deprecated — do not use them to upload bytes.
+- Taking a content out of one category: remove_content_from_categories (other placements stay).
+  Do not reset all placements with update_content(channels=...) and re-add them.
 - Renaming a category or channel: rename_category / rename_channel (only the name changes).
   Never create a new category and move the contents just to rename one.
 - Removing Drive files: archive_drive_files (to the bin, reversible; restore_drive_files undoes
