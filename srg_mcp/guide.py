@@ -252,9 +252,13 @@ Top-down, one call per item; each call returns the id the next step needs.
    `get_hub_profile` opens it, `get_channel(channel_id, workspace_id)` shows
    the categories with their ids.
 "Already exists" on a rerun: don't retry, look the id up (step 4 or
-`list_channels`) and carry on. Renaming or reordering channels and categories
-is not in the core connector (those updates replace the whole object and reset
-what you leave out); do it in the SRG+ app.
+`list_channels`) and carry on.
+Rename: `rename_category(channel_id, category_id, name, workspace_id)` and
+`rename_channel(channel_id, name, workspace_id)` change ONLY the name (contents,
+order, pin, options, privacy stay). Emoji in names are fine. Rename in place;
+never create a new category and move the contents just to change a name.
+Reordering channels and categories is not in the core connector; do it in the
+SRG+ app.
 
 ## Set up a hub profile (the brand page srgplus.com/<user_name>)
 1. Read first: `get_hub_profile(hub_profile_id, workspace_id)` → name,

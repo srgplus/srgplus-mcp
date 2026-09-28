@@ -159,3 +159,38 @@ def test_tool_signatures_unchanged():
     assert params(channels.restore_category) == ["channel_id", "category_id", "workspace_id"]
     assert params(channels.archive_channel) == ["channel_id", "workspace_id"]
     assert params(channels.restore_channel) == ["channel_id", "workspace_id"]
+
+
+# --------------------------------------------------------------------------
+# rename_category / rename_channel: PATCH, name only (SRGDEV-827)
+# --------------------------------------------------------------------------
+
+
+def test_rename_category_patches_only_the_name(monkeypatch) -> None:
+    from srg_mcp import channels
+
+    calls = []
+    monkeypatch.setattr(
+        channels._raw,
+        "call",
+        lambda ws, method, path, **kw: calls.append((ws, method, path, kw)),
+    )
+
+    assert channels.rename_category("ch1", "cat1", "🎬 Reels", "ws-1") == "renamed"
+    assert calls == [
+        ("ws-1", "PATCH", "/api/v1/channels/ch1/categories/cat1", {"json": {"name": "🎬 Reels"}})
+    ]
+
+
+def test_rename_channel_patches_only_the_name(monkeypatch) -> None:
+    from srg_mcp import channels
+
+    calls = []
+    monkeypatch.setattr(
+        channels._raw,
+        "call",
+        lambda ws, method, path, **kw: calls.append((ws, method, path, kw)),
+    )
+
+    assert channels.rename_channel("ch1", "Brand", "ws-1") == "renamed"
+    assert calls == [("ws-1", "PATCH", "/api/v1/channels/ch1", {"json": {"name": "Brand"}})]

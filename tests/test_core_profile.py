@@ -33,6 +33,8 @@ EXPECTED_CORE = {
     "create_hub_profile",
     "create_channel",
     "create_category",
+    "rename_channel",
+    "rename_category",
     "create_upload",
     "complete_upload",
     "set_cover",
