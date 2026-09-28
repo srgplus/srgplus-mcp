@@ -1,6 +1,36 @@
+from urllib.parse import quote
+
+from srg_mcp import _raw
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
 from mcp.types import ToolAnnotations
+
+
+def _hub_profile_id(channel_id: str, workspace_id: str) -> str:
+    """Id of the hub profile that owns ``channel_id``.
+
+    The archive/restore endpoints need it (without it they answer a bare 400,
+    SRGDEV-856), but GET /api/v2/channels/{id} only carries the hub's user
+    name, so the hub is looked up by that name. Works for archived channels.
+    """
+    channel = _raw.call(workspace_id, "GET", f"/api/v2/channels/{channel_id}") or {}
+    user_name = channel.get("hubProfileUserName")
+    hub = (
+        _raw.call(
+            workspace_id,
+            "GET",
+            f"/api/v1/hub-profiles/username/{quote(user_name, safe='')}",
+        )
+        if user_name
+        else None
+    ) or {}
+    hub_profile_id = hub.get("id")
+    if not hub_profile_id:
+        raise ValueError(
+            f"Could not find the hub profile of channel {channel_id}; "
+            "re-check the channel id with list_channels."
+        )
+    return hub_profile_id
 
 
 @mcp.tool(
@@ -157,7 +187,12 @@ def archive_channel(channel_id: str, workspace_id: str) -> dict | None:
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    return get_client().channels.archive(channel_id, workspace_id=workspace_id)
+    return _raw.call(
+        workspace_id,
+        "POST",
+        f"/api/v1/channels/{channel_id}/archive",
+        params={"hubProfileId": _hub_profile_id(channel_id, workspace_id)},
+    )
 
 
 @mcp.tool(
@@ -173,12 +208,12 @@ def restore_channel(channel_id: str, workspace_id: str) -> str:
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    channels = get_client().channels
-    method = getattr(channels, "restore", None)
-    if callable(method):
-        method(channel_id, workspace_id=workspace_id)
-    else:  # pragma: no cover - older SDK without the method
-        channels._get_http(workspace_id).post(f"/api/v1/channels/{channel_id}/restore")
+    _raw.call(
+        workspace_id,
+        "POST",
+        f"/api/v1/channels/{channel_id}/restore",
+        params={"hubProfileId": _hub_profile_id(channel_id, workspace_id)},
+    )
     return "restored"
 
 
@@ -341,8 +376,13 @@ def archive_category(
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    return get_client().channels.archive_category(
-        channel_id, category_id, workspace_id=workspace_id
+    # The only one of the four that reads hubProfileId from a JSON body; the
+    # other archive/restore endpoints take it as a query parameter.
+    return _raw.call(
+        workspace_id,
+        "POST",
+        f"/api/v1/channels/{channel_id}/{category_id}/archive",
+        json={"hubProfileId": _hub_profile_id(channel_id, workspace_id)},
     )
 
 
@@ -363,14 +403,12 @@ def restore_category(
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    channels = get_client().channels
-    method = getattr(channels, "restore_category", None)
-    if callable(method):
-        method(channel_id, category_id, workspace_id=workspace_id)
-    else:  # pragma: no cover - older SDK without the method
-        channels._get_http(workspace_id).post(
-            f"/api/v1/channels/{channel_id}/{category_id}/restore"
-        )
+    _raw.call(
+        workspace_id,
+        "POST",
+        f"/api/v1/channels/{channel_id}/{category_id}/restore",
+        params={"hubProfileId": _hub_profile_id(channel_id, workspace_id)},
+    )
     return "restored"
 
 
