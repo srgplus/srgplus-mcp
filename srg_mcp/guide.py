@@ -32,6 +32,8 @@ Almost every tool takes `workspace_id` explicitly. Resolve it once and reuse it.
    as compact rows (id, name, user_name, has_avatar), 50 per page; pass the
    returned `cursor` for more. Use `search` (name or username) instead of
    paging through 100+ brands. `get_hub_profile` has the full profile.
+   Archived hubs are left out; `include_archived=True` lists them too, each
+   marked `"archived": true`.
 3. `list_channels(hub_profile_id, workspace_id)` then
    `get_channel(channel_id, workspace_id)` — the channel payload carries its
    categories WITH their ids. Category ids for attaching content come from here.
@@ -274,6 +276,9 @@ what you leave out); do it in the SRG+ app.
 Core is archive-only (no hard delete; deletion stays manual in-app):
 `archive_content`/`restore_content`, `archive_channel`/`restore_channel`,
 `archive_category`/`restore_category`, `archive_hub_profile`/`restore_hub_profile`.
+Archived hubs and channels drop out of `list_hub_profiles` / `list_channels`.
+To find one to restore, pass `include_archived=True` (archived hubs come back
+marked `"archived": true`). Archiving a hub archives its channels too.
 Permanently deleting a hub profile is app-only (the owner, signed in, deletes
 an archived hub in the SRG+ app); the API refuses any API key with 403, so no
 connector surface has a tool for it. Asked to delete a hub, offer to archive

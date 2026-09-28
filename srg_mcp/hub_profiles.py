@@ -234,10 +234,13 @@ def list_hub_profiles(
     search: str | None = None,
     page_size: int = 50,
     cursor: str | None = None,
+    include_archived: bool = False,
 ) -> dict:
     """List the hub profiles (brands) of a workspace as compact rows:
     id, name, user_name, has_avatar.
 
+    Archived hubs are left out. include_archived=True lists them too, each
+    marked "archived": true (that is where to find a hub to restore).
     search: optional, case-insensitive match on name or user_name.
     page_size: rows per page (default 50, max 200). When more exist the
         result has a `cursor`; pass it back for the next page.
@@ -245,7 +248,12 @@ def list_hub_profiles(
     Returns {"items": [...], "total": n, "cursor": str | None}. For bio,
     avatar/cover URLs, links and `version` call get_hub_profile.
     """
-    rows = _raw.call(workspace_id, "GET", f"/api/v1/workspaces/{workspace_id}/hub-profiles") or []
+    rows = _raw.call(
+        workspace_id,
+        "GET",
+        f"/api/v1/workspaces/{workspace_id}/hub-profiles",
+        params={"includeArchived": "true"} if include_archived else None,
+    ) or []
     needle = (search or "").strip().lower()
     items = [
         {
@@ -253,11 +261,17 @@ def list_hub_profiles(
             "name": row.get("name"),
             "user_name": row.get("userName"),
             "has_avatar": bool((row.get("avatar") or {}).get("details")),
+            **({"archived": True} if row.get("isArchived") else {}),
         }
         for row in rows
-        if not needle
-        or needle in (row.get("name") or "").lower()
-        or needle in (row.get("userName") or "").lower()
+        # The backend leaves archived hubs out unless asked; this also drops
+        # any marked row it still sends (SRGDEV-851).
+        if (include_archived or not row.get("isArchived"))
+        and (
+            not needle
+            or needle in (row.get("name") or "").lower()
+            or needle in (row.get("userName") or "").lower()
+        )
     ]
     try:
         start = int(cursor) if cursor else 0
@@ -638,7 +652,11 @@ def set_hub_cover(
     )
 )
 def archive_hub_profile(hub_profile_id: str, workspace_id: str) -> dict | None:
-    """Archive a hub profile (hidden from listings, content preserved).
+    """Archive a hub profile (content preserved, its channels archived with it).
+
+    The hub drops out of list_hub_profiles and the SRG+ apps;
+    list_hub_profiles(include_archived=True) still lists it, marked
+    "archived": true. Undo with restore_hub_profile.
 
     This is how an agent removes a hub. Deleting it permanently is app-only:
     the owner, signed in to the SRG+ app, deletes an archived hub there.
@@ -659,6 +677,8 @@ def archive_hub_profile(hub_profile_id: str, workspace_id: str) -> dict | None:
 def restore_hub_profile(hub_profile_id: str, workspace_id: str) -> dict | None:
     """Restore a previously archived hub profile.
 
+    Find its id with list_hub_profiles(workspace_id, include_archived=True):
+    archived hubs are marked "archived": true.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     return get_client().hub_profiles.restore(hub_profile_id, workspace_id=workspace_id)
