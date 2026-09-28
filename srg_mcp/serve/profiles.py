@@ -15,8 +15,10 @@ memberships), create/update content, upload an asset, attach to categories,
 fill a content's Featured Assets / Featured Content (named sections), read and
 edit a hub profile (bio, links, avatar, cover) with PATCH semantics, create a
 new hub with its channels and categories, the brand context (index + memory
-page), and reversible archive/restore.
-Excluded on purpose: user/permission management, hard deletes, moves, the
+page), reversible archive/restore, and Drive file clean-up (archive → restore
+or permanent delete, the same as the app's Drive bin).
+Excluded on purpose: user/permission management, hard deletes of structure
+(hubs, channels, categories), moves, the
 low-level collection subcontent tools, workspace actions, the full-replace
 ``update_channel`` / ``update_category``, and the deprecated ``create_*_asset``
 registrars.
@@ -75,13 +77,20 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "set_covers",
     "list_drive_files",
     "get_asset",
+    # Drive clean-up, same flow as the app's bin: archive (reversible) →
+    # restore, or permanent delete (only of archived files, or archive_first).
+    "archive_drive_files",
+    "restore_drive_files",
+    "delete_drive_files",
     # Brand context: the whole brand in one call + the brand memory page (SRGDEV-824/825)
     "get_brand_index",
     "get_brand_memory",
     "append_brand_memory",
-    # Lifecycle — ARCHIVE ONLY in the core profile (reversible). Hard delete is
-    # intentionally kept OUT of the agent connector for now (manual-only in the
-    # app); the delete_* tools still exist on the full /mcp surface for admin use.
+    # Lifecycle — ARCHIVE ONLY for structure in the core profile (reversible).
+    # Hard delete of content / channels / categories / hubs stays OUT of the
+    # agent connector (manual-only in the app); the delete_* tools still exist
+    # on the full /mcp surface for admin use. Drive files are the exception
+    # above (delete_drive_files).
     "archive_content",
     "restore_content",
     "archive_channel",

@@ -217,6 +217,21 @@ an empty record and are deprecated; don't use them to upload bytes.
 - `get_asset(asset_id, workspace_id)` → `url` is a signed download URL (~7 days)
   to verify a file. The Drive has no folders yet.
 
+### Remove Drive files (archive → delete)
+Same as the app's Drive bin. A file's asset id is what these tools take.
+1. Find the ids: `list_drive_files(hub_profile_id, workspace_id, search="SB")`.
+   Show the user the exact list (name + id) and what stays, before touching it.
+2. Archive (reversible): `archive_drive_files(asset_ids=[...], workspace_id)`
+   moves them to the bin. `list_drive_files(..., archived=True)` lists the bin;
+   `restore_drive_files(asset_ids=[...], workspace_id)` brings them back.
+3. Delete for good: `delete_drive_files(asset_ids=[...], workspace_id)` deletes
+   files that are already archived (a non-archived one fails and is kept).
+   One step: `delete_drive_files(..., archive_first=True)` archives then deletes.
+   Returns per-file results and `bytes_freed`. Up to 200 ids per call; a file
+   that fails doesn't stop the batch. Deleting cannot be undone.
+Covers set from a Drive image are copies and survive; Media widgets and
+Featured Assets that point at a deleted file lose it.
+
 ## New hub with channels and categories
 Top-down, one call per item; each call returns the id the next step needs.
 1. `create_hub_profile(name, user_name, workspace_id,
@@ -273,7 +288,9 @@ what you leave out); do it in the SRG+ app.
    every write: a stale write then fails with 409 and changes nothing.
 
 ## Archive / restore (reversible)
-Core is archive-only (no hard delete; deletion stays manual in-app):
+Hubs, channels, categories and content are archive-only in core (no hard
+delete; deletion stays manual in-app). Drive files are the exception: see
+"Remove Drive files" above.
 `archive_content`/`restore_content`, `archive_channel`/`restore_channel`,
 `archive_category`/`restore_category`, `archive_hub_profile`/`restore_hub_profile`.
 Archived hubs and channels drop out of `list_hub_profiles` / `list_channels`.
@@ -293,7 +310,7 @@ it and say the final delete is done by the owner in the app.
   `get_content_v2`.
 - Two profiles on one host: `https://mcp.srgplus.com` (curated daily set, the
   default) and `https://mcp.srgplus.com/mcp` (full set: users, permissions,
-  hard delete, low-level collection subcontent, workspace actions). Don't
+  hard delete of structure, low-level collection subcontent, workspace actions). Don't
   connect both in one surface.
 """
 

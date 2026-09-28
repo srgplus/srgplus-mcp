@@ -430,3 +430,81 @@ def test_worker_threads_see_the_request_api_key(monkeypatch) -> None:
 
     assert done["completed"] == 6 and covers["set"] == 6
     assert seen and set(seen) == {"srgplus_request_key"}
+
+
+# --------------------------------------------------------------------------
+# Drive clean-up: archive / restore / delete
+# --------------------------------------------------------------------------
+
+
+def test_list_drive_files_archived_lists_the_bin(api: _Api) -> None:
+    api.routes[("POST", f"/api/v1/assets/{HUB}/filter/")] = {
+        "items": [{"id": "a1", "name": "SB 01", "$type": "Image", "archived": "2026-09-28T00:00:00Z"}],
+        "cursor": None,
+    }
+
+    out = uploads.list_drive_files(HUB, WS, search="SB", archived=True)
+
+    assert api.calls[0]["path"] == f"/api/v1/assets/{HUB}/filter/"  # bin is paged, not searched
+    assert api.calls[0]["json"]["onlyArchived"] is True
+    assert out["items"][0]["archived"] is True
+
+
+def test_archive_drive_files_uses_bulk_archive_and_dedupes(api: _Api) -> None:
+    api.routes[("POST", "/api/v1/nodes/bulk-archive")] = lambda body: [
+        {"nodeId": "a1", "success": True},
+        {"nodeId": "a2", "success": False, "error": "Forbidden"},
+    ]
+
+    out = uploads.archive_drive_files(["a1", "a2", "a1", ""], WS)
+
+    assert api.calls[0]["json"] == {"nodeIds": ["a1", "a2"]}
+    assert out["archived"] == 1 and out["failed"] == 1
+    assert out["results"][1] == {"asset_id": "a2", "ok": False, "error": "Forbidden"}
+
+
+def test_restore_drive_files_reports_each_file(api: _Api) -> None:
+    api.routes[("POST", "/api/v1/nodes/a2/restore")] = _http_error(
+        srg.exceptions.NotFoundError, 404, "Node not found"
+    )
+
+    out = uploads.restore_drive_files(["a1", "a2"], WS)
+
+    assert {c["path"] for c in api.calls} == {"/api/v1/nodes/a1/restore", "/api/v1/nodes/a2/restore"}
+    assert out["restored"] == 1 and out["failed"] == 1
+    assert out["results"][0] == {"asset_id": "a1", "ok": True}
+
+
+def test_delete_drive_files_two_step_does_not_archive(api: _Api) -> None:
+    api.routes[("POST", "/api/v1/nodes/bulk-delete")] = {
+        "results": [{"nodeId": "a1", "success": True}, {"nodeId": "a2", "success": False, "error": "not archived"}],
+        "bytesFreed": 1234,
+    }
+
+    out = uploads.delete_drive_files(["a1", "a2"], WS)
+
+    assert [c["path"] for c in api.calls] == ["/api/v1/nodes/bulk-delete"]
+    assert out == {
+        "results": [{"asset_id": "a1", "ok": True}, {"asset_id": "a2", "ok": False, "error": "not archived"}],
+        "deleted": 1,
+        "failed": 1,
+        "bytes_freed": 1234,
+    }
+
+
+def test_delete_drive_files_archive_first_archives_then_deletes(api: _Api) -> None:
+    api.routes[("POST", "/api/v1/nodes/bulk-archive")] = [{"nodeId": "a1", "success": False, "error": "already archived"}]
+    api.routes[("POST", "/api/v1/nodes/bulk-delete")] = {"results": [{"nodeId": "a1", "success": True}], "bytesFreed": 10}
+
+    out = uploads.delete_drive_files(["a1"], WS, archive_first=True)
+
+    assert [c["path"] for c in api.calls] == ["/api/v1/nodes/bulk-archive", "/api/v1/nodes/bulk-delete"]
+    assert out["deleted"] == 1 and out["bytes_freed"] == 10
+
+
+def test_drive_cleanup_rejects_empty_and_oversized_lists(api: _Api) -> None:
+    with pytest.raises(ValueError):
+        uploads.delete_drive_files([], WS)
+    with pytest.raises(ValueError):
+        uploads.archive_drive_files([f"a{i}" for i in range(201)], WS)
+    assert api.calls == []
