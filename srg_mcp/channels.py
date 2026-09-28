@@ -92,6 +92,8 @@ def create_channel(
 ) -> str:
     """Create a new channel in a hub profile. Returns the new channel ID.
 
+    A new channel starts with one category, "New Content"; add more with
+    create_category.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Private" (default) or "Public"
     """

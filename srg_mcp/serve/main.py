@@ -104,7 +104,8 @@ logger = logging.getLogger("srgplus-mcp-serve")
 # profile is built, so both surfaces share the wrapped functions.
 install_tool_error_wrapper(mcp)
 
-# Curated ~10-tool profile served at /mcp/core; /mcp keeps the full set.
+# Curated daily-work profile (CORE_TOOL_NAMES) served at /mcp/core and POST /;
+# /mcp keeps the full set.
 core_mcp = build_core_mcp(mcp)
 
 

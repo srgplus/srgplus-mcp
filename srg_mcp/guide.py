@@ -215,6 +215,30 @@ an empty record and are deprecated; don't use them to upload bytes.
 - `get_asset(asset_id, workspace_id)` → `url` is a signed download URL (~7 days)
   to verify a file. The Drive has no folders yet.
 
+## New hub with channels and categories
+Top-down, one call per item; each call returns the id the next step needs.
+1. `create_hub_profile(name, user_name, workspace_id,
+   availability_level="Private", description=...)` → the new hub's `id`.
+   The default is "Public" (anyone can open srgplus.com/<user_name>), so pass
+   "Private" for an internal hub (team or agents only). user_name is the URL
+   slug, unique across SRG+ (letters, digits, `-`, `_`, `.`); name 2-150,
+   description optional, 10-1000 characters. A new hub already has one
+   Private channel, "general" (`archive_channel` it if you don't need it).
+2. `create_channel(name, hub_profile_id, workspace_id, privacy="Private")` →
+   the channel id. Keep the channels of an internal hub Private (the default).
+   Names are unique within the hub, 1-50 characters, no `/` or `\`. Channels
+   need a Pro or higher plan: a Free or Individual workspace is refused.
+3. `create_category(channel_id, name, workspace_id)` → the category id. Names
+   are unique within the channel (1-50 characters). A new channel already has
+   one category, "New Content".
+4. Check: `list_hub_profiles(workspace_id, search=<user_name>)` lists the hub,
+   `get_hub_profile` opens it, `get_channel(channel_id, workspace_id)` shows
+   the categories with their ids.
+"Already exists" on a rerun: don't retry, look the id up (step 4 or
+`list_channels`) and carry on. Renaming or reordering channels and categories
+is not in the core connector (those updates replace the whole object and reset
+what you leave out); do it in the SRG+ app.
+
 ## Set up a hub profile (the brand page srgplus.com/<user_name>)
 1. Read first: `get_hub_profile(hub_profile_id, workspace_id)` → name,
    sub_name (line under the name), user_name, description (the bio),
@@ -289,8 +313,9 @@ def get_srgplus_guide() -> str:
     exact widget shapes for the `context` body, the Markdown standard for Text
     widgets (GFM + ==highlight==), safe-update rules, Featured
     Assets / Featured Content with named sections (versions), asset upload,
-    setting up a hub profile (bio, links, avatar and cover sizes / safe area),
-    archive/restore, and common pitfalls.
+    creating a new hub with its channels and categories, setting up a hub
+    profile (bio, links, avatar and cover sizes / safe area), archive/restore,
+    and common pitfalls.
 
     Call this once before authoring or editing content if you are unsure of the
     workflow or a widget's shape — it is the authoritative reference and ships

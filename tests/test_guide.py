@@ -83,3 +83,18 @@ def test_guide_workspace_advice_matches_the_tools():
         "`get_workspace(workspace_id)`, with seats and subscription, is on the"
         " full `/mcp` only" in text
     )
+
+
+def test_guide_new_hub_recipe_is_private_and_core_only():
+    text = " ".join(SRGPLUS_GUIDE.split())  # immune to re-wrapping
+    assert "## New hub with channels and categories" in SRGPLUS_GUIDE
+    # Internal hubs and their channels are created Private.
+    assert 'availability_level="Private"' in text
+    assert 'privacy="Private"' in text
+    # The recipe only uses tools the core connector actually serves.
+    for tool in ("create_hub_profile", "create_channel", "create_category"):
+        assert tool in CORE_TOOL_NAMES
+        assert f"`{tool}(" in SRGPLUS_GUIDE
+    # Renames/reorders go through full-replace updates, which core leaves out.
+    assert "update_channel" not in SRGPLUS_GUIDE
+    assert "update_category" not in SRGPLUS_GUIDE
