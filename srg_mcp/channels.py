@@ -176,6 +176,29 @@ def update_channel(
 
 @mcp.tool(
     annotations=ToolAnnotations(
+        title="Rename channel",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+def rename_channel(channel_id: str, name: str, workspace_id: str) -> str:
+    """Rename a channel. ONLY the name changes: its categories (order and
+    archive state), privacy and everything else keep their values.
+
+    name: the new name, 1-50 characters, no `/` or `\\`, unique within the
+        hub (a taken name fails with 409).
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    """
+    _raw.call(
+        workspace_id, "PATCH", f"/api/v1/channels/{channel_id}", json={"name": name}
+    )
+    return "renamed"
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
         title="Archive channel",
         readOnlyHint=False,
         destructiveHint=True,
@@ -357,6 +380,38 @@ def update_category(
         options=opts,
         workspace_id=workspace_id,
     )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Rename category",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+def rename_category(
+    channel_id: str,
+    category_id: str,
+    name: str,
+    workspace_id: str,
+) -> str:
+    """Rename a category. ONLY the name changes: its contents and their order,
+    pin, notifications, display options and archive state keep their values.
+
+    name: the new name, 1-50 characters, unique within the channel (archived
+        categories count too; a taken name fails with 409). Emoji are fine.
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Use this instead of creating a new category and moving the contents.
+    """
+    _raw.call(
+        workspace_id,
+        "PATCH",
+        f"/api/v1/channels/{channel_id}/categories/{category_id}",
+        json={"name": name},
+    )
+    return "renamed"
 
 
 @mcp.tool(

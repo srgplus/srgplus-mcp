@@ -14,7 +14,8 @@ content), search, read both content variants (v2 covers private-channel
 memberships), create/update content, upload an asset, attach to categories,
 fill a content's Featured Assets / Featured Content (named sections), read and
 edit a hub profile (bio, links, avatar, cover) with PATCH semantics, create a
-new hub with its channels and categories, the brand context (index + memory
+new hub with its channels and categories, rename a channel or category
+(PATCH: only the name changes), the brand context (index + memory
 page), reversible archive/restore, and Drive file clean-up (archive → restore
 or permanent delete, the same as the app's Drive bin).
 Excluded on purpose: user/permission management, hard deletes of structure
@@ -70,6 +71,9 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "create_hub_profile",
     "create_channel",
     "create_category",
+    # Rename only (PATCH, SRGDEV-827): the name changes, nothing else resets.
+    "rename_channel",
+    "rename_category",
     # Media from the user's computer (no base64) + covers + Drive (SRGDEV-741)
     "create_upload",
     "complete_upload",

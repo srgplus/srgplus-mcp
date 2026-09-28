@@ -101,6 +101,9 @@ def test_guide_new_hub_recipe_is_private_and_core_only():
     for tool in ("create_hub_profile", "create_channel", "create_category"):
         assert tool in CORE_TOOL_NAMES
         assert f"`{tool}(" in SRGPLUS_GUIDE
-    # Renames/reorders go through full-replace updates, which core leaves out.
+    # Full-replace updates stay out of core; renames use the PATCH tools.
     assert "update_channel" not in SRGPLUS_GUIDE
     assert "update_category" not in SRGPLUS_GUIDE
+    for tool in ("rename_channel", "rename_category"):
+        assert tool in CORE_TOOL_NAMES
+        assert f"`{tool}(" in SRGPLUS_GUIDE
