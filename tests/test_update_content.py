@@ -365,3 +365,22 @@ def test_get_content_v2_passes_version_and_cover_source(raw: _Recorder, monkeypa
     assert out["version"] == 9
     assert out["cover"]["source_asset_id"] == "img-7"
     assert out["hub_profile_id"] == HUB_ID  # same snake_case shape as before
+
+
+def test_remove_content_from_categories_sends_only_the_listed_categories(monkeypatch) -> None:
+    from srg_mcp import contents
+
+    seen = {}
+
+    def remove_from_categories(content_id, *, channels_categories, workspace_id):
+        seen.update(content_id=content_id, cc=channels_categories, ws=workspace_id)
+
+    fake = SimpleNamespace(contents=SimpleNamespace(remove_from_categories=remove_from_categories))
+    monkeypatch.setattr(contents, "get_client", lambda: fake)
+
+    assert contents.remove_content_from_categories("c1", "ch1", ["cat1"], "ws-1") == "removed"
+    assert seen["content_id"] == "c1" and seen["ws"] == "ws-1"
+    assert [(c.channel_id, c.category_ids) for c in seen["cc"]] == [("ch1", ["cat1"])]
+
+    with pytest.raises(ValueError):
+        contents.remove_content_from_categories("c1", "ch1", [], "ws-1")

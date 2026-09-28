@@ -12,7 +12,7 @@ are untouched.
 CORE selection: find things (workspaces → hub profiles → channels →
 content), search, read both content variants (v2 covers private-channel
 memberships), create/update content, upload an asset, attach to categories,
-fill a content's Featured Assets / Featured Content (named sections), read and
+remove a content from chosen categories only, fill a content's Featured Assets / Featured Content (named sections), read and
 edit a hub profile (bio, links, avatar, cover) with PATCH semantics, create a
 new hub with its channels and categories, rename a channel or category
 (PATCH: only the name changes), the brand context (index + memory
@@ -50,6 +50,8 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    # Take a content out of ONE category, other placements stay (no reset).
+    "remove_content_from_categories",
     # Featured Assets / Featured Content of a content item (the "More" menu),
     # with named sections such as "Version 1" (SRGDEV-756)
     "set_featured_assets",

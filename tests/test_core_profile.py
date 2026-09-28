@@ -21,6 +21,7 @@ EXPECTED_CORE = {
     "update_content",
     "upload_asset",
     "add_content_to_categories",
+    "remove_content_from_categories",
     "set_featured_assets",
     "set_featured_contents",
     "list_featured_sections",
