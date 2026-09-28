@@ -106,8 +106,14 @@ def build_core_mcp(full_mcp: FastMCP) -> FastMCP:
     a tool rename that forgets this list fails loudly in CI/deploy.
     """
     # Carry the same server-level guidance onto the core surface so /mcp/core
-    # clients get the SRG+ pitfalls too (the instructions string is shared).
-    core = FastMCP("SRG+ Core", instructions=full_mcp.instructions)
+    # clients get the SRG+ pitfalls too (the instructions string is shared),
+    # and the same connector logo.
+    core = FastMCP(
+        "SRG+ Core",
+        instructions=full_mcp.instructions,
+        website_url=full_mcp._mcp_server.website_url,
+        icons=full_mcp._mcp_server.icons,
+    )
     full_tools = full_mcp._tool_manager._tools
     missing = [name for name in CORE_TOOL_NAMES if name not in full_tools]
     if missing:
