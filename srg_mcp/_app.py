@@ -1,4 +1,5 @@
 from mcp.server.fastmcp import FastMCP
+from mcp.types import Icon
 
 # Server-level guidance returned to EVERY connecting client (claude.ai,
 # Cursor, Cline, ChatGPT, etc.) on initialize. Unlike a Claude Code project
@@ -68,4 +69,15 @@ Pitfalls that cause real damage — read before writing:
 one in SRG+ Settings → API Keys, do not retry.
 """
 
-mcp = FastMCP("SRG+", instructions=SRG_INSTRUCTIONS)
+# Connector logo sent in serverInfo on initialize (MCP `Implementation.icons`).
+# Connector lists (claude.ai, Claude desktop) read the logo from here, not from
+# the favicon, and show a letter placeholder when it is missing. Absolute URLs
+# so the stdio (PyPI) install gets the same logo; the files are the whitelisted
+# ``serve/static/`` assets.
+SRG_WEBSITE_URL = "https://srgplus.com"
+SRG_ICONS = [
+    Icon(src="https://mcp.srgplus.com/static/icon-192.png", mimeType="image/png", sizes=["192x192"]),
+    Icon(src="https://mcp.srgplus.com/static/icon-512.png", mimeType="image/png", sizes=["512x512"]),
+]
+
+mcp = FastMCP("SRG+", instructions=SRG_INSTRUCTIONS, website_url=SRG_WEBSITE_URL, icons=SRG_ICONS)

@@ -94,3 +94,30 @@ async def test_protected_resource_metadata_advertises_logo(client):
     body = r.json()
     assert body["op_logo_uri"] == "http://localhost:8090/static/icon-512.png"
     assert body["resource_documentation"] == "https://github.com/srgplus/srgplus-mcp"
+
+
+# ------------------------------------------------------- serverInfo icons
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("surface", ["full", "core"])
+async def test_initialize_server_info_carries_logo(client, surface):
+    """Connector lists read the logo from serverInfo.icons on initialize;
+    without it they show a letter placeholder. Both /mcp and /mcp/core send
+    it, and every icon points at a whitelisted static file we really serve."""
+    from urllib.parse import urlparse
+
+    from srg_mcp._app import mcp
+    from srg_mcp.serve.main import core_mcp
+
+    server = (mcp if surface == "full" else core_mcp)._mcp_server
+    options = server.create_initialization_options()
+    assert options.website_url == "https://srgplus.com"
+    assert options.icons, "serverInfo.icons is empty"
+    for icon in options.icons:
+        url = urlparse(icon.src)
+        assert url.scheme == "https" and url.netloc == "mcp.srgplus.com"
+        assert icon.mimeType == "image/png"
+        r = await client.get(url.path)
+        assert r.status_code == 200, f"{url.path} returned {r.status_code}"
+        assert r.content[:8] == b"\x89PNG\r\n\x1a\n"
