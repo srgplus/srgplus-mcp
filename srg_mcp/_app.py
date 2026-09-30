@@ -64,6 +64,11 @@ Pitfalls that cause real damage — read before writing:
   → run the script locally → complete_upload → set_cover / set_covers (many at once). No base64.
   upload_asset is only for a public source_url or a tiny base64 file. The create_*_asset tools
   only register an empty record and are deprecated — do not use them to upload bytes.
+- A video's cover is made by the server for EVERY upload, normally within a minute (a burst of
+  uploads can delay it). No cover yet is normal: wait, re-check with get_asset (a real cover has
+  non-zero cover width/height/size), never archive or re-upload a file for a late cover, and if
+  it is still missing after ~15 minutes tell the user. set_cover/set_covers set a CONTENT's cover
+  from a Drive image; they do not touch a video file's own preview.
 - Taking a content out of one category: remove_content_from_categories (other placements stay).
   Do not reset all placements with update_content(channels=...) and re-add them.
 - Renaming a category or channel: rename_category / rename_channel (only the name changes).

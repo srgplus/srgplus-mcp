@@ -79,7 +79,7 @@ def test_create_upload_registers_files_with_type_first(api: _Api) -> None:
     assert list(image)[0] == "$type"  # discriminator must come first for .NET
     assert image == {
         "$type": "Image",
-        "name": "Reel 01.jpg",
+        "name": "Reel 01",  # the backend adds ".jpg" itself (SRGDEV-909)
         "extension": "jpg",
         "memorySizeInBytes": 312345,
         "uploadPartSizeInBytes": 5 * 1024 * 1024,
@@ -88,6 +88,7 @@ def test_create_upload_registers_files_with_type_first(api: _Api) -> None:
         "height": 1920.0,
     }
     assert video["$type"] == "Video" and "width" not in video
+    assert video["name"] == "clip"
     assert [u["asset_id"] for u in out["uploads"]] == ["asset-1", "asset-2"]
     # Paths with spaces are shell-quoted in the script; URLs are embedded.
     assert "'/Users/me/Covers A/Reel 01.jpg'" in out["script"]
@@ -108,6 +109,66 @@ def test_create_upload_validates_before_any_call(api: _Api, spec: dict, message:
     with pytest.raises(ValueError, match=message):
         uploads.create_upload(HUB, WS, files=[spec])
     assert api.calls == []
+
+
+def _registered_names(api: _Api, files: list[dict]) -> list[str]:
+    api.routes[("POST", "/api/v1/assets/batch")] = lambda body: [
+        {"$type": a["$type"], "id": f"asset-{i}", "uploadId": f"up-{i}", "urls": [f"https://s3/p{i}"]}
+        for i, a in enumerate(body["assets"], 1)
+    ]
+    out = uploads.create_upload(HUB, WS, files=files)
+    assets = api.calls[0]["json"]["assets"]
+    assert [u["name"] for u in out["uploads"]] == [a["name"] for a in assets]
+    return [a["name"] for a in assets]
+
+
+def test_create_upload_name_from_path_has_no_extension(api: _Api) -> None:
+    names = _registered_names(
+        api,
+        [
+            {"path": "/Users/me/clip.mp4", "size": 10},
+            {"path": "/Users/me/Reel 01.JPG", "size": 10, "width": 9, "height": 9},
+            {"path": "/Users/me/v1.2 final.mp4", "size": 10},
+        ],
+    )
+    assert names == ["clip", "Reel 01", "v1.2 final"]
+    assert api.calls[0]["json"]["assets"][0]["extension"] == "mp4"
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("clip.mp4", "clip"),
+        ("Clip.MP4", "Clip"),  # suffix match ignores case
+        ("v1.2 final.mp4", "v1.2 final"),  # only the real extension goes
+        ("v1.2 final", "v1.2 final"),
+        ("clip", "clip"),
+        ("clip.mov", "clip.mov"),  # a different suffix is part of the name
+        ("clip.mp4.mp4", "clip.mp4"),  # one suffix at most
+    ],
+)
+def test_create_upload_explicit_name_drops_only_the_matching_extension(
+    api: _Api, given: str, expected: str
+) -> None:
+    names = _registered_names(api, [{"path": "/Users/me/x.mp4", "name": given, "size": 10}])
+    assert names == [expected]
+
+
+def test_create_upload_name_without_path_uses_extension_from_name_or_field(api: _Api) -> None:
+    names = _registered_names(
+        api,
+        [
+            {"name": "notes.pdf", "size": 10},
+            {"name": "notes.final.pdf", "extension": ".PDF", "size": 10},
+            {"name": "report", "extension": "pdf", "size": 10},
+        ],
+    )
+    assert names == ["notes", "notes.final", "report"]
+
+
+def test_create_upload_keeps_a_name_that_is_only_the_extension(api: _Api) -> None:
+    names = _registered_names(api, [{"name": ".mp4", "path": "/x/a.mp4", "size": 10}])
+    assert names == [".mp4"]
 
 
 def test_create_upload_urls_mode_lists_parts(api: _Api) -> None:

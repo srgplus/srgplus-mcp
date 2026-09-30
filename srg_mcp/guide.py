@@ -191,7 +191,10 @@ The hosted server cannot read local paths and base64 does not scale (one
    ```
    (Linux: `stat -c%s FILE`, `identify -format '%w %h' FILE`.)
 2. `create_upload(hub_profile_id, workspace_id, files=[{"path","size","width","height"}, ...])`
-   — up to 100 files; returns `script` (bash + curl).
+   — up to 100 files; returns `script` (bash + curl). The Drive name is the
+   file name WITHOUT its extension (the server adds the extension itself), so
+   `Reel 01.jpg` shows as "Reel 01". If you pass `name`, leave the extension
+   off; a trailing `.jpg` is dropped for you.
 3. Save `script` to a file and run it: `bash /tmp/srg_upload.sh`. It PUTs every
    file (big videos in parts) and prints ONE JSON line.
 4. `complete_upload(workspace_id, uploads=<that JSON>)` → ready Drive assets
@@ -201,8 +204,23 @@ The hosted server cannot read local paths and base64 does not scale (one
    `curl -sS -f -X PUT -T "Reel 01.jpg" -D - -o /dev/null "<part url>" | grep -i etag`
 
 `upload_asset(..., source_url=...)` remains for files already on the web;
-`base64_content` only for tiny files. The `create_*_asset` tools only register
+`base64_content` only for tiny files. Its `name` follows the same rule (no
+extension needed; a trailing one is dropped).
+Videos get their cover automatically, see "Video covers are automatic". The `create_*_asset` tools only register
 an empty record and are deprecated; don't use them to upload bytes.
+
+## Video covers are automatic
+The server makes a video's cover by itself for EVERY upload (this connector,
+the apps, the web, the Finder drive), normally within about a minute. A burst
+of many uploads at once can delay it. A video with no cover yet is normal.
+- Check with `get_asset(asset_id, workspace_id)`: a real cover has non-zero
+  `cover` width, height and size. `cover.urls` are signed URLs that exist
+  even when there is no cover yet, so a URL alone proves nothing.
+- Wait and check again a minute or two later. NEVER archive or re-upload a
+  file because its cover is late: the copy would wait for its cover too.
+- Still no cover after about 15 minutes: tell the user, don't work around it.
+- `set_cover` / `set_covers` (below) set a CONTENT's cover from a Drive
+  image. They do not give a video file its own preview.
 
 ## Covers
 - From a Drive image: `set_cover(content_id, asset_id, workspace_id)`; many at

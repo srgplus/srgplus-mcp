@@ -9,6 +9,7 @@ import httpx
 import srg
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from srg_mcp._names import strip_extension
 from mcp.types import ToolAnnotations
 
 
@@ -99,6 +100,11 @@ def get_asset(asset_id: str, workspace_id: str) -> dict:
 
     The `url` field is a signed download URL (valid about 7 days): fetch it to
     verify an uploaded file. `cover.urls` holds the generated thumbnails.
+    A video's cover is made by the server after every upload, normally within
+    about a minute (a burst of uploads can delay it). A real cover has non-zero
+    `cover` width, height and size; the signed `cover.urls` exist even when
+    there is no cover yet. No cover yet: check again later, never archive or
+    re-upload the file for it, and after ~15 minutes tell the user.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     return (
@@ -381,6 +387,11 @@ def upload_asset(
     Prefer this over the deprecated create_*_asset tools, which only
     register an empty record and fail against the current backend.
 
+    name: display name WITHOUT the extension (the server adds it itself); a
+        trailing ".ext" that matches the file's extension is dropped.
+    A video's cover is made by the server automatically, normally within about
+    a minute; a late cover is no reason to re-upload (see get_asset).
+
     Provide the file via exactly one of:
       - source_url: an http(s):// URL the server downloads, or
       - base64_content: base64-encoded bytes (only for tiny files).
@@ -399,6 +410,9 @@ def upload_asset(
     _validate_single_source(source_url, base64_content)
     ext = _infer_extension(extension, source_url, name)
     suffix = f".{ext}" if ext else ""
+    # The backend stores the file as `{name}.{extension}`: keep the extension
+    # out of the display name or the key becomes "clip.mp4.mp4".
+    name = strip_extension(name, ext)
 
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     try:
