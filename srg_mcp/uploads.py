@@ -33,6 +33,7 @@ from mcp.types import ToolAnnotations
 from srg_mcp import _raw
 from srg_mcp._app import mcp
 from srg_mcp._client import get_client
+from srg_mcp._names import name_from_path, strip_extension
 
 # Backend limit per POST /api/v1/assets/batch (CreateAssetsValidator).
 _BATCH_LIMIT = 100
@@ -98,8 +99,11 @@ def _kind(extension: str) -> str:
 def _plan_file(index: int, spec: dict) -> dict:
     """Validate one entry of ``files`` and build its asset-create payload."""
     path = spec.get("path")
-    name = spec.get("name") or (PurePath(path).name if path else None)
-    label = f"files[{index}]" + (f" ({name})" if name else "")
+    given = spec.get("name")
+    # The backend stores the file as `{name}.{extension}`, so the display name
+    # must not carry the extension: "clip.mp4" would end up as "clip.mp4.mp4".
+    name = given or (name_from_path(path) if path else None)
+    label = f"files[{index}]" + (f" ({given or PurePath(path).name})" if name else "")
     if not name:
         raise ValueError(f"{label}: pass `path` (the file on your computer) or `name`.")
 
@@ -118,6 +122,8 @@ def _plan_file(index: int, spec: dict) -> dict:
     )
     if not extension:
         raise ValueError(f"{label}: the file needs an extension (or pass `extension`).")
+    if given:
+        name = strip_extension(name, extension)
 
     kind = spec.get("type") or _kind(extension)
     if kind not in ("Image", "Video", "File"):
@@ -235,7 +241,9 @@ def create_upload(
         {"path": "/Users/me/Covers/Reel 01.jpg",   # local path, used by the script
          "size": 312345,                           # bytes (required)
          "width": 1080, "height": 1920}            # pixels, required for images
-      optional: "name" (display name, default = file name), "type"
+      optional: "name" (display name, default = file name WITHOUT the
+      extension: the server adds it itself, so a trailing ".mp4" in `name` is
+      dropped), "type"
       ("Image" | "Video" | "File", default from the extension), "extension".
       Get sizes and image dimensions for a folder on macOS with:
         for f in *.jpg; do printf '{"path":"%s","size":%s,"width":%s,"height":%s}\\n' \\
@@ -387,6 +395,10 @@ def complete_upload(workspace_id: str, uploads: list[dict]) -> dict:
     Safe to repeat: an upload that is already complete is reported as
     "already_completed". Then use the asset ids with set_cover / set_covers
     (images) or in a Media widget (videos, once they finish processing).
+    A video's own cover is made by the server automatically, normally within
+    about a minute (a burst of uploads can delay it). No cover yet is normal:
+    check again with get_asset later, never archive or re-upload the file for
+    it, and if there is still none after ~15 minutes tell the user.
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     Returns {"assets": [{asset_id, status, name, type, size, ...}],
@@ -460,6 +472,8 @@ def set_cover(
         list_drive_files. The image bytes are copied into the cover, so the
         cover stays even if the Drive file is deleted later. Right after an
         upload the image may need a few seconds to be ready; this tool waits.
+        This sets a CONTENT's cover; it does not change a video file's own
+        preview (the server makes that itself).
     hub_profile_id: owning hub; resolved from the content when omitted.
     expected_version: optional `version` from get_content_v2 — the cover is
         set only if the content did not change since; else 409.
@@ -491,6 +505,8 @@ def set_covers(
     hub_profile_id: pass it when all contents are in one hub (saves a lookup
         per item); otherwise each content's hub is resolved automatically.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Sets each CONTENT's cover, not a video file's own preview (the server
+    makes that itself).
     A failure on one item does not stop the others. Returns
     {"results": [{content_id, asset_id, status | error}], "set": n, "failed": n}.
     """
@@ -570,8 +586,10 @@ def list_drive_files(
     archived: True lists the Drive bin (archived files) instead, e.g. to
         find what to restore_drive_files or delete_drive_files. Paged only
         (ignores `search`).
-    A file appears a few seconds after complete_upload. The Drive has no
-    folders. For a file's signed download URL (valid ~7 days) call get_asset.
+    A file appears a few seconds after complete_upload. A video's `status`
+    shows its processing; its cover appears on its own, normally within about
+    a minute, so a late cover is no reason to archive or re-upload it (see
+    get_asset). The Drive has no folders. For a file's signed download URL (valid ~7 days) call get_asset.
     """
     bad = [t for t in (types or []) if t not in _DRIVE_TYPES]
     if bad:

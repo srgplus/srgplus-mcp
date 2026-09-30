@@ -107,3 +107,32 @@ def test_guide_new_hub_recipe_is_private_and_core_only():
     for tool in ("rename_channel", "rename_category"):
         assert tool in CORE_TOOL_NAMES
         assert f"`{tool}(" in SRGPLUS_GUIDE
+
+
+def test_guide_says_video_covers_are_automatic_and_not_a_reason_to_reupload():
+    text = " ".join(SRGPLUS_GUIDE.split())  # immune to re-wrapping
+    assert "## Video covers are automatic" in SRGPLUS_GUIDE
+    assert "for EVERY upload" in text and "within about a minute" in text
+    # How to tell a real cover from the always-present signed URLs.
+    assert "non-zero `cover` width, height and size" in text
+    assert "`cover.urls` are signed URLs that exist even when there is no cover yet" in text
+    # What to do, and what not to do.
+    assert "NEVER archive or re-upload" in text
+    assert "Still no cover after about 15 minutes: tell the user" in text
+    assert "set a CONTENT's cover from a Drive image" in text
+
+
+def test_guide_upload_names_carry_no_extension():
+    text = " ".join(SRGPLUS_GUIDE.split())
+    assert "WITHOUT its extension" in text and "a trailing `.jpg` is dropped" in text
+
+
+def test_instructions_and_docstrings_say_a_late_video_cover_is_normal():
+    for marker in ("EVERY upload", "never archive or re-upload"):
+        assert marker in mcp.instructions
+    for tool in ("get_asset", "complete_upload", "list_drive_files", "upload_asset"):
+        doc = " ".join(mcp._tool_manager.get_tool(tool).description.split())
+        assert "re-upload" in doc, tool
+    for tool in ("set_cover", "set_covers"):
+        doc = " ".join(mcp._tool_manager.get_tool(tool).description.split())
+        assert "CONTENT" in doc and "video file's own preview" in doc, tool
