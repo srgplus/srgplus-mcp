@@ -194,3 +194,50 @@ def test_rename_channel_patches_only_the_name(monkeypatch) -> None:
 
     assert channels.rename_channel("ch1", "Brand", "ws-1") == "renamed"
     assert calls == [("ws-1", "PATCH", "/api/v1/channels/ch1", {"json": {"name": "Brand"}})]
+
+
+# --------------------------------------------------------------------------
+# delete_channel / delete_category: real delete of an ARCHIVED one (SRGDEV-921)
+# --------------------------------------------------------------------------
+
+
+def _deletes(api: _Api) -> list[str]:
+    return [c["path"] for c in api.calls if c["method"] == "DELETE"]
+
+
+def test_delete_channel_deletes_without_archiving_by_default(api):
+    assert channels.delete_channel(CH, WS) == "deleted"
+
+    assert _deletes(api) == [f"/api/v1/channels/{CH}"]
+    assert api.posts() == []
+
+
+def test_delete_channel_archive_first_archives_then_deletes(api):
+    assert channels.delete_channel(CH, WS, archive_first=True) == "deleted"
+
+    assert [(c["method"], c["path"]) for c in api.calls if c["method"] != "GET"] == [
+        ("POST", f"/api/v1/channels/{CH}/archive"),
+        ("DELETE", f"/api/v1/channels/{CH}"),
+    ]
+    assert api.posts()[0]["params"] == {"hubProfileId": HUB}
+
+
+def test_delete_category_uses_the_categories_route(api):
+    assert channels.delete_category(CH, CAT, WS) == "deleted"
+
+    assert _deletes(api) == [f"/api/v1/channels/{CH}/categories/{CAT}"]
+    assert api.posts() == []
+
+
+def test_delete_category_archive_first_archives_then_deletes(api):
+    assert channels.delete_category(CH, CAT, WS, archive_first=True) == "deleted"
+
+    assert [(c["method"], c["path"]) for c in api.calls if c["method"] != "GET"] == [
+        ("POST", f"/api/v1/channels/{CH}/{CAT}/archive"),
+        ("DELETE", f"/api/v1/channels/{CH}/categories/{CAT}"),
+    ]
+
+
+def test_delete_docstrings_say_the_contents_stay():
+    for tool in (channels.delete_channel, channels.delete_category):
+        assert "NOT deleted" in (tool.__doc__ or "")
