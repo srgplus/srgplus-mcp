@@ -52,8 +52,10 @@ EXPECTED_CORE = {
     "restore_content",
     "archive_channel",
     "restore_channel",
+    "delete_channel",
     "archive_category",
     "restore_category",
+    "delete_category",
     "archive_hub_profile",
     "restore_hub_profile",
 }
@@ -80,10 +82,10 @@ async def test_full_mcp_unchanged_and_superset():
     names = {t.name for t in await mcp.list_tools()}
     assert len(names) >= 90  # full surface still loaded
     assert EXPECTED_CORE <= names
-    # Hard-delete tools for structure exist on the full surface but are kept
-    # OUT of the agent core profile (archive-only); only Drive files can be
-    # deleted from core (delete_drive_files).
-    for hard_delete in ("delete_channel", "delete_category", "delete_permission_group"):
+    # Permission groups stay admin-only on the full surface. Channels and
+    # categories can be deleted from core once archived (SRGDEV-921), like
+    # Drive files (delete_drive_files).
+    for hard_delete in ("delete_permission_group",):
         assert hard_delete in names, f"{hard_delete} should stay on full /mcp"
         assert hard_delete not in EXPECTED_CORE, f"{hard_delete} must NOT be in core"
     # Permanent hub delete is JWT-only (API keys get 403): no tool on any surface.

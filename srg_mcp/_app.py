@@ -72,6 +72,9 @@ Pitfalls that cause real damage — read before writing:
   it) then delete_drive_files (permanent, frees storage; only archived files, or pass
   archive_first=True for one step). list_drive_files(archived=True) lists the bin. Confirm the
   exact file list with the user before deleting. Covers set from Drive images are copies and stay.
+- Deleting a channel or category for good: archive_channel / archive_category, then
+  delete_channel / delete_category (only archived ones, or archive_first=True). The contents
+  inside are NOT deleted, only unlinked from it; say so and confirm with the user first.
 
 "No workspaces found for this API key" means the key was revoked or is invalid — issue a new
 one in SRG+ Settings → API Keys, do not retry.

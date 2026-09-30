@@ -295,9 +295,9 @@ SRG+ app.
    every write: a stale write then fails with 409 and changes nothing.
 
 ## Archive / restore (reversible)
-Hubs, channels, categories and content are archive-only in core (no hard
-delete; deletion stays manual in-app). Drive files are the exception: see
-"Remove Drive files" above.
+Hubs and content are archive-only in core (no hard delete; deletion stays
+manual in-app). Drive files, channels and categories can also be deleted for
+good: see "Remove Drive files" above and "Delete a channel or category" below.
 `archive_content`/`restore_content`, `archive_channel`/`restore_channel`,
 `archive_category`/`restore_category`, `archive_hub_profile`/`restore_hub_profile`.
 Archived hubs and channels drop out of `list_hub_profiles` / `list_channels`.
@@ -308,6 +308,20 @@ an archived hub in the SRG+ app); the API refuses any API key with 403, so no
 connector surface has a tool for it. Asked to delete a hub, offer to archive
 it and say the final delete is done by the owner in the app.
 
+## Delete a channel or category (archive → delete)
+1. Confirm the exact channel or category with the user. Tell them the
+   contents inside are NOT deleted: they only lose this place and stay in the
+   hub, in Drive and in other channels (`get_brand_index` lists the ones left
+   in no category).
+2. Archive (reversible): `archive_channel(channel_id, workspace_id)` or
+   `archive_category(channel_id, category_id, workspace_id)`.
+3. Delete for good: `delete_channel(channel_id, workspace_id)` (the channel
+   and all its categories) or `delete_category(channel_id, category_id,
+   workspace_id)`. Only archived ones; a live one fails with 409 and is kept.
+   One step: pass `archive_first=True`.
+Needs the hub owner or admin rights, the same as archive. Taking ONE content
+out of a category is `remove_content_from_categories`, not a category delete.
+
 ## Pitfalls — handle, don't abort
 - A 401/403 on an individual category or channel is NORMAL (per-item access
   control). Skip that item and continue the batch; don't fail the whole task.
@@ -316,8 +330,8 @@ it and say the final delete is done by the owner in the app.
 - Private-channel content: the slim list/filter omits memberships — use
   `get_content_v2`.
 - Two profiles on one host: `https://mcp.srgplus.com` (curated daily set, the
-  default) and `https://mcp.srgplus.com/mcp` (full set: users, permissions,
-  hard delete of structure, low-level collection subcontent, workspace actions). Don't
+  default) and `https://mcp.srgplus.com/mcp` (full set: users, permissions
+  and permission groups, low-level collection subcontent, workspace actions). Don't
   connect both in one surface.
 """
 

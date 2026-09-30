@@ -16,10 +16,11 @@ remove a content from chosen categories only, fill a content's Featured Assets /
 edit a hub profile (bio, links, avatar, cover) with PATCH semantics, create a
 new hub with its channels and categories, rename a channel or category
 (PATCH: only the name changes), the brand context (index + memory
-page), reversible archive/restore, and Drive file clean-up (archive → restore
-or permanent delete, the same as the app's Drive bin).
-Excluded on purpose: user/permission management, hard deletes of structure
-(hubs, channels, categories), moves, the
+page), reversible archive/restore, Drive file clean-up (archive → restore
+or permanent delete, the same as the app's Drive bin), and the permanent
+delete of an archived channel or category (its contents stay, SRGDEV-921).
+Excluded on purpose: user/permission management, hard deletes of hubs and
+contents, moves, the
 low-level collection subcontent tools, workspace actions, the full-replace
 ``update_channel`` / ``update_category``, and the deprecated ``create_*_asset``
 registrars.
@@ -92,17 +93,19 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "get_brand_index",
     "get_brand_memory",
     "append_brand_memory",
-    # Lifecycle — ARCHIVE ONLY for structure in the core profile (reversible).
-    # Hard delete of content / channels / categories / hubs stays OUT of the
-    # agent connector (manual-only in the app); the delete_* tools still exist
-    # on the full /mcp surface for admin use. Drive files are the exception
-    # above (delete_drive_files).
+    # Lifecycle — archive / restore (reversible). Hard delete of contents and
+    # hubs stays OUT of the agent connector (a hub delete is app-only, JWT).
+    # Channels and categories can be deleted for good once archived, same as
+    # the app and the Drive bin (SRGDEV-921): only archived ones, or
+    # archive_first; the contents inside are never deleted, only unlinked.
     "archive_content",
     "restore_content",
     "archive_channel",
     "restore_channel",
+    "delete_channel",
     "archive_category",
     "restore_category",
+    "delete_category",
     "archive_hub_profile",
     "restore_hub_profile",
 )

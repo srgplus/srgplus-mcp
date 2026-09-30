@@ -210,6 +210,10 @@ def archive_channel(channel_id: str, workspace_id: str) -> dict | None:
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
+    return _archive_channel(channel_id, workspace_id)
+
+
+def _archive_channel(channel_id: str, workspace_id: str) -> dict | None:
     return _raw.call(
         workspace_id,
         "POST",
@@ -242,18 +246,31 @@ def restore_channel(channel_id: str, workspace_id: str) -> str:
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title="Delete channel",
+        title="Permanently delete channel",
         readOnlyHint=False,
         destructiveHint=True,
+        idempotentHint=False,
         openWorldHint=True,
     )
 )
-def delete_channel(channel_id: str, workspace_id: str) -> str:
-    """Permanently delete a channel and all its categories/sections. Irreversible.
+def delete_channel(channel_id: str, workspace_id: str, archive_first: bool = False) -> str:
+    """PERMANENTLY delete a channel with all its categories. Cannot be undone.
 
+    The contents in it are NOT deleted: they only lose their place in this
+    channel and stay in the hub, in Drive and in any other channel. A content
+    placed nowhere else shows up in get_brand_index as not in any category.
+    Two ways, same result as the app:
+    - Two steps (safer): archive_channel first, check, then call this. Only an
+      archived channel is deleted; a live one fails with 409 and is kept.
+    - One step: archive_first=True archives and then deletes in this call
+      (for a channel the user clearly asked to remove for good).
+    Confirm the channel with the user before calling. Needs the hub owner or
+    admin rights (the same as archive). The channel's name and link are freed.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    get_client().channels.delete(channel_id, workspace_id=workspace_id)
+    if archive_first:
+        _archive_channel(channel_id, workspace_id)
+    _raw.call(workspace_id, "DELETE", f"/api/v1/channels/{channel_id}")
     return "deleted"
 
 
@@ -431,6 +448,10 @@ def archive_category(
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
+    return _archive_category(channel_id, category_id, workspace_id)
+
+
+def _archive_category(channel_id: str, category_id: str, workspace_id: str) -> dict | None:
     # The only one of the four that reads hubProfileId from a JSON body; the
     # other archive/restore endpoints take it as a query parameter.
     return _raw.call(
@@ -469,9 +490,10 @@ def restore_category(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title="Delete category",
+        title="Permanently delete category",
         readOnlyHint=False,
         destructiveHint=True,
+        idempotentHint=False,
         openWorldHint=True,
     )
 )
@@ -479,13 +501,26 @@ def delete_category(
     channel_id: str,
     category_id: str,
     workspace_id: str,
+    archive_first: bool = False,
 ) -> str:
-    """Permanently delete a category from a channel. Irreversible.
+    """PERMANENTLY delete a category from its channel. Cannot be undone.
 
+    The contents in it are NOT deleted: they only lose their place in this
+    category and stay in the hub, in Drive and in any other category. A content
+    placed nowhere else shows up in get_brand_index as not in any category.
+    Two ways, same result as the app:
+    - Two steps (safer): archive_category first, check, then call this. Only an
+      archived category is deleted; a live one fails with 409 and is kept.
+    - One step: archive_first=True archives and then deletes in this call.
+    Confirm the category with the user before calling. Needs the hub owner or
+    admin rights. To take ONE content out of a category, use
+    remove_content_from_categories instead.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    get_client().channels.delete_category(
-        channel_id, category_id, workspace_id=workspace_id
+    if archive_first:
+        _archive_category(channel_id, category_id, workspace_id)
+    _raw.call(
+        workspace_id, "DELETE", f"/api/v1/channels/{channel_id}/categories/{category_id}"
     )
     return "deleted"
 
