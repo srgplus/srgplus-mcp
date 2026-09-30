@@ -319,7 +319,7 @@ it and say the final delete is done by the owner in the app.
    and all its categories) or `delete_category(channel_id, category_id,
    workspace_id)`. Only archived ones; a live one fails with 409 and is kept.
    One step: pass `archive_first=True`.
-Needs the hub owner or admin rights, the same as archive. Taking ONE content
+Only the hub owner or an admin can delete (editors can archive, not delete). Taking ONE content
 out of a category is `remove_content_from_categories`, not a category delete.
 
 ## Pitfalls — handle, don't abort

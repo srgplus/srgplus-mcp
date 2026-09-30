@@ -264,8 +264,9 @@ def delete_channel(channel_id: str, workspace_id: str, archive_first: bool = Fal
       archived channel is deleted; a live one fails with 409 and is kept.
     - One step: archive_first=True archives and then deletes in this call
       (for a channel the user clearly asked to remove for good).
-    Confirm the channel with the user before calling. Needs the hub owner or
-    admin rights (the same as archive). The channel's name and link are freed.
+    Confirm the channel with the user before calling. Only the hub owner or
+    an admin can delete (editors can archive, not delete); others get 403.
+    The channel's name and link are freed.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     if archive_first:
@@ -512,8 +513,8 @@ def delete_category(
     - Two steps (safer): archive_category first, check, then call this. Only an
       archived category is deleted; a live one fails with 409 and is kept.
     - One step: archive_first=True archives and then deletes in this call.
-    Confirm the category with the user before calling. Needs the hub owner or
-    admin rights. To take ONE content out of a category, use
+    Confirm the category with the user before calling. Only the hub owner or
+    an admin can delete (others get 403). To take ONE content out of a category, use
     remove_content_from_categories instead.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
