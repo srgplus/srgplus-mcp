@@ -131,13 +131,18 @@ def get_content_v2(content_id: str, workspace_id: str) -> dict:
     Also returns `version`: pass it as expected_version to update_content /
     set_cover so a stale write fails with 409 instead of overwriting someone
     else's newer edit. `cover.source_asset_id` is the Drive image the cover was
-    set from (re-apply it with set_cover).
+    set from (re-apply it with set_cover). `action_buttons` are the content's
+    buttons ({"title", "logic": {"$type": "OpenLink" | "Media" | "OpenForm", ...}});
+    send them back with update_content(action_buttons=...) when adding one.
     """
     data = _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}") or {}
     result = ContentV2.model_validate(data).model_dump(mode="json")
     # Fields newer than the pinned SDK's model: pass them through.
     if data.get("version") is not None:
         result["version"] = data["version"]
+    # Always present, so "no buttons" is never mistaken for "not read": an
+    # update_content(action_buttons=...) REPLACES the list.
+    result["action_buttons"] = data.get("actionButtons") or []
     source = (data.get("cover") or {}).get("sourceAssetId")
     if source and isinstance(result.get("cover"), dict):
         result["cover"]["source_asset_id"] = source
@@ -266,6 +271,8 @@ def update_content(
     categories: list[dict] | None = None,
     cover_asset_id: str | None = None,
     expected_version: int | None = None,
+    action_buttons: list[dict] | None = None,
+    clear_main_asset: bool = False,
 ) -> dict:
     """Update a content item. ONLY the fields you pass are changed.
 
@@ -287,6 +294,13 @@ def update_content(
     cover_asset_id: use an Image that is already in the hub Drive as the
         cover (e.g. an asset from complete_upload). Same as set_cover.
         Pass cover_image OR cover_asset_id, not both.
+    action_buttons: the buttons on the content (at most 3), REPLACES the list:
+        [{"title": "Buy", "url": "https://..."}, {"title": "Watch", "asset_id": "<a video in
+        the hub's Drive>"}, {"title": "Apply", "form_id": "<an SRG+ form>"}]; [] removes them
+        all. To add one, read the current ones (get_content_v2 `action_buttons`) and send them
+        all back with the new one.
+    clear_main_asset: True takes the main asset (the playable video/file) off the content;
+        the file stays in Drive. Not together with main_asset_id.
     expected_version: the `version` from get_content_v2. When set, the update
         applies only if nobody changed the content since you read it; else it
         fails with 409 (re-read, re-apply, retry). Use it when several agents
@@ -317,6 +331,9 @@ def update_content(
     """
     if cover_image is not None and cover_asset_id is not None:
         raise ValueError("Pass cover_image OR cover_asset_id, not both.")
+    if clear_main_asset and main_asset_id is not None:
+        raise ValueError("Pass main_asset_id OR clear_main_asset=True, not both.")
+    buttons = _action_buttons_in(action_buttons) if action_buttons is not None else None
     if categories is not None:
         categories, stored = _category_options(content_id, workspace_id, categories)
         if hub_profile_id is None and stored is not None:
@@ -335,6 +352,10 @@ def update_content(
         context=context,
         categories=categories,
     )
+    if buttons is not None:
+        body["actionButtons"] = buttons
+    if clear_main_asset:
+        body["clearMainAsset"] = True
     if cover is not None:
         body["cover"] = cover.upsert()
     if not body and cover_asset_id is None:
@@ -396,6 +417,49 @@ def update_content(
         "updated_fields": updated,
         "context": data.get("context", []),
     }
+
+
+_ACTION_LOGICS = {"openlink": "OpenLink", "media": "Media", "openform": "OpenForm"}
+_ACTION_FIELDS = {"url": ("OpenLink", "url"), "asset_id": ("Media", "assetId"), "form_id": ("OpenForm", "formId")}
+_MAX_ACTION_BUTTONS = 3
+
+
+def _action_buttons_in(buttons: list) -> list[dict]:
+    """Action buttons in the API's shape: {"title", "logic": {"$type" FIRST, url | assetId | formId}}.
+
+    Takes the short form {"title", "url" | "asset_id" | "form_id"} or the API's own
+    (as read from get_content_v2). Fails before any write on a bad button.
+    """
+    if not isinstance(buttons, list):
+        raise ValueError('action_buttons must be a list like [{"title": "Buy", "url": "https://..."}].')
+    if len(buttons) > _MAX_ACTION_BUTTONS:
+        raise ValueError(f"At most {_MAX_ACTION_BUTTONS} action buttons; got {len(buttons)}.")
+    out: list[dict] = []
+    for index, button in enumerate(buttons):
+        where = f"action_buttons[{index}]"
+        if not isinstance(button, dict):
+            raise ValueError(f'{where} must be an object like {{"title": "Buy", "url": "https://..."}}.')
+        title = str(button.get("title") or "").strip()
+        if not title:
+            raise ValueError(f"{where} needs a title.")
+        logic = button.get("logic")
+        short = {key: button[key] for key in _ACTION_FIELDS if button.get(key)}
+        if isinstance(logic, dict) and not short:
+            kind = _ACTION_LOGICS.get(str(logic.get("$type", "")).replace(" ", "").lower())
+            field = {"OpenLink": "url", "Media": "assetId", "OpenForm": "formId"}.get(kind or "")
+            value = logic.get(field) if field else None
+        elif len(short) == 1 and logic is None:
+            (key, value), = short.items()
+            kind, field = _ACTION_FIELDS[key]
+        else:
+            raise ValueError(f"{where} needs exactly one of url, asset_id or form_id.")
+        if not kind or not str(value or "").strip():
+            raise ValueError(f"{where}: the action must be OpenLink (url), Media (asset_id) or OpenForm (form_id).")
+        value = str(value).strip()
+        if kind == "OpenLink" and not value.lower().startswith(("http://", "https://")):
+            value = f"https://{value}"
+        out.append({"title": title, "logic": {"$type": kind, field: value}})
+    return out
 
 
 def _patch_body(

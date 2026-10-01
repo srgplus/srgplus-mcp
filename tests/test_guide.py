@@ -5,6 +5,8 @@ exactly as written."""
 
 from __future__ import annotations
 
+import re
+
 from srg_mcp._app import mcp
 from srg_mcp.guide import SRGPLUS_GUIDE, get_srgplus_guide
 from srg_mcp.serve.profiles import CORE_TOOL_NAMES
@@ -101,12 +103,31 @@ def test_guide_new_hub_recipe_is_private_and_core_only():
     for tool in ("create_hub_profile", "create_channel", "create_category"):
         assert tool in CORE_TOOL_NAMES
         assert f"`{tool}(" in SRGPLUS_GUIDE
-    # Full-replace updates stay out of core; renames use the PATCH tools.
-    assert "update_channel" not in SRGPLUS_GUIDE
-    assert "update_category" not in SRGPLUS_GUIDE
+    # The all-in-one updates stay out of the guide (and core); renames use the
+    # PATCH tools and the rest goes through the one-thing tools.
+    assert not re.search(r"\bupdate_channel\b", SRGPLUS_GUIDE)
+    assert not re.search(r"\bupdate_category\b", SRGPLUS_GUIDE)
     for tool in ("rename_channel", "rename_category"):
         assert tool in CORE_TOOL_NAMES
         assert f"`{tool}(" in SRGPLUS_GUIDE
+
+
+def test_guide_channel_look_order_and_category_settings_use_core_tools():
+    text = " ".join(SRGPLUS_GUIDE.split())  # immune to re-wrapping
+    assert "## Channel look and order, category settings" in SRGPLUS_GUIDE
+    for tool in (
+        "set_channel_icon",
+        "remove_channel_icon",
+        "set_channel_slug",
+        "reorder_channels",
+        "reorder_categories",
+        "update_category_settings",
+    ):
+        assert tool in CORE_TOOL_NAMES
+        assert f"`{tool}(" in SRGPLUS_GUIDE
+    for word in ('view="grid"', '"scroll"', 'card_size="large"', 'open_view="grid"', '"9:16"', "pinned=True"):
+        assert word in text
+    assert "Reordering channels and categories is not in the core connector" not in text
 
 
 def test_guide_says_video_covers_are_automatic_and_not_a_reason_to_reupload():
@@ -167,3 +188,9 @@ def test_preset_cover_tools_are_documented_for_agents():
     assert "REPLACES" in mcp._tool_manager.get_tool("set_cover_preset").description
     assert "set_cover_preset" in mcp._tool_manager.get_tool("set_cover").description
     assert {"list_cover_presets", "set_cover_preset"} <= set(CORE_TOOL_NAMES)
+
+
+def test_guide_explains_action_buttons_and_clearing_the_main_asset():
+    text = " ".join(SRGPLUS_GUIDE.split())
+    assert "action_buttons=[" in text and "`[]` removes them all" in text
+    assert "clear_main_asset=True" in text

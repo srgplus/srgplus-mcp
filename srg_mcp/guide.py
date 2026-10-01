@@ -140,6 +140,12 @@ existing `context`, and send the full list back. You need not pass
 `hub_profile_id`; it is resolved from the content. Never call the raw REST
 `PUT /contents` for a partial edit: it wipes every field you omit, the cover
 included.
+Action buttons (at most 3 on a content): `update_content(content_id, workspace_id,
+action_buttons=[{"title": "Buy", "url": "https://..."}])`; a button opens a link
+(`url`), plays a Drive video (`asset_id`) or opens a form (`form_id`). The list
+REPLACES the current one: to add one, read `action_buttons` with get_content_v2 and
+send them all back with the new one; `[]` removes them all. `clear_main_asset=True` takes the main video or file off the
+content (it stays in Drive).
 
 Several agents/people editing the same content? `get_content_v2` returns a
 `version`. Pass it back as `update_content(..., expected_version=<version>)`
@@ -293,8 +299,43 @@ Rename: `rename_category(channel_id, category_id, name, workspace_id)` and
 `rename_channel(channel_id, name, workspace_id)` change ONLY the name (contents,
 order, pin, options, privacy stay). Emoji in names are fine. Rename in place;
 never create a new category and move the contents just to change a name.
-Reordering channels and categories is not in the core connector; do it in the
-SRG+ app.
+
+## Channel look and order, category settings (the apps' Edit Channel / Edit Category)
+Each tool changes ONE thing and keeps everything else as stored. Never recreate a
+channel or category to change any of these.
+- Icon, the picture before a channel's name:
+  `set_channel_icon(channel_id, workspace_id, symbol="star.fill", color="blue")`, or
+  `emoji="🚀"`, or `photo_asset_id=<an image in the hub's Drive>` (one of the three).
+  Colours: red, orange, yellow, green, mint, cyan, blue, indigo, purple, pink, brown,
+  gray, or #RRGGBB; left out, the current colour stays. Symbols: the 48 the apps offer
+  (listed in the tool), `symbol="#"` is a coloured "#"; for anything else use an emoji.
+  `remove_channel_icon(channel_id, workspace_id)` brings back the plain "#".
+- Link: `set_channel_slug(channel_id, "video-lessons", workspace_id)` →
+  srgplus.com/<user_name>/channels/video-lessons. Lower-case latin letters, digits and
+  dashes. Until set here the link follows the name (a rename changes it); old links keep
+  working.
+- Order: `reorder_channels(hub_profile_id, [channel ids], workspace_id)` (hub owner or
+  admin) and `reorder_categories(channel_id, [category ids], workspace_id)`; exact names
+  work too. The listed ones come first in that order, the others keep their order after
+  them. Archived ones have no place in the order. The pinned category always shows first
+  in the apps.
+- A category's settings: `update_category_settings(channel_id, category_id,
+  workspace_id, ...)` (the category's id or exact name) with only what changes:
+  - `pinned=True` pins it to the top of the channel (one per channel: the other one is
+    unpinned; an archived category must be restored first), `pinned=False` unpins it.
+  - `view="grid"`, `"list"` or `"scroll"` (one horizontal row of cards);
+    `card_size="large"` or `"small"` (grid and list); `open_view="grid"` or `"list"`
+    (how it shows when opened, See all).
+  - `cover_ratio`: the card shape as width:height, "16:9", "9:16", "3:2", "2:3", "5:4",
+    "4:5", "square" or "original" ("16:9 vertical", as the apps label it, is 9:16).
+  - `expandable` (can be opened), `progression` (show done / not done),
+    `sequential` (members finish the contents in order), `notifications` (push to
+    channel members on new content), `email` (also by email).
+  `create_category` takes `view_type`, `card_size`, `open_view` and `cover_ratio` too.
+`get_channel` shows the channel's `icon`, `slug` and `link`, and each category's
+`settings` in the words above; `list_channels` shows each channel's icon and link.
+Who may open a channel (roles, groups, specific people) is set in the SRG+ app: those
+endpoints take a signed-in person, not an API key.
 
 ## Set up a hub profile (the brand page srgplus.com/<user_name>)
 1. Read first: `get_hub_profile(hub_profile_id, workspace_id)` → name,
@@ -326,6 +367,53 @@ SRG+ app.
 <<HUB_IMAGE_RULES>>
 6. With several editors, pass `expected_version` (the `version` you read) to
    every write: a stale write then fails with 409 and changes nothing.
+
+## Hub profile widgets (the sections of the brand page)
+The page shows its widgets in order: Text, LinkList (the links), ContentWidget
+(cards of contents, or of Drive assets), HubProfile (other profiles), Media (a
+playable video) and Contact. `get_hub_profile` only lists them (id, type,
+title).
+1. Read: `get_hub_profile_widgets(hub_profile_id, workspace_id)` → `version`
+   and every widget in display order with `position` (0 = top) and all its
+   fields. A ContentWidget shows `referenceIds` (what a write takes) and
+   `references` `[{$type, id, name}]` (read-only; `$type` is `Content` or the
+   asset kind). Names are as of the last write of that widget.
+2. Content cards: `set_hub_profile_content_widget(hub_profile_id, workspace_id,
+   content_ids=[...])` → the widget then shows exactly those contents in that
+   order (REPLACES its list, like `set_featured_contents`). It fills the
+   page's only content widget, or creates one; with several, pass `widget_id`
+   (or `title`: the widget with that exact title, created if missing). Ids
+   that don't exist are skipped and listed in `skipped`. The contents
+   themselves are never changed.
+3. Any widget, ONE at a time; the others stay exactly as stored:
+   - add: `add_hub_profile_widget(hub_profile_id, workspace_id,
+     widget={...}, position=0)` (omit position to add at the end; max 20);
+   - change: `update_hub_profile_widget(hub_profile_id, widget_id,
+     widget={"title": "Reports"}, workspace_id)` → only the fields you pass
+     change; a list you pass (links, referenceIds, ...) replaces that list. The
+     type cannot change: remove and add instead;
+   - remove: `remove_hub_profile_widget(hub_profile_id, widget_id,
+     workspace_id)` → only the widget goes, never the contents it shows;
+   - order: `reorder_hub_profile_widgets(hub_profile_id, widget_ids=[...],
+     workspace_id)` → listed first, the rest after in their order.
+4. Shapes (camelCase, `$type` first, same as in a content's `context`):
+   - `{"$type":"Text","title":null,"content":"<markdown>"}` (up to 5,000 characters)
+   - `{"$type":"LinkList","title":null,"links":[{"title":"..","url":"https://.."}]}`
+   - `{"$type":"ContentWidget","title":"Playbooks","referenceType":"Content",
+     "referenceIds":[{"$type":"Content","id":"<content id>"}]}` (`"Asset"` and
+     Drive asset ids for files)
+   - `{"$type":"HubProfile","title":null,"hubProfileIds":["<hub profile id>"]}`
+   - `{"$type":"Media","title":null,"assetId":"<playable video id>","autoplay":false}`
+   - `{"$type":"Contact","title":null,"contacts":[{"$type":"Email","details":"hi@brand.com"}]}`
+   A widget read with `get_hub_profile_widgets` can be sent back as is.
+5. Whole page at once: `update_hub_profile(..., widgets=[...])` REPLACES ALL
+   widgets (the link list included): keep each `id`, leave `id` out for a new
+   one, and a widget you leave out is removed. Every widget is resolved again,
+   so one deleted content anywhere fails the write. Prefer the one-widget
+   tools. `create_hub_profile(widgets=...)` takes Text, LinkList and Contact
+   only.
+6. Every widget write takes `expected_version` (the `version` you read) →
+   409, nothing written, if the profile changed since.
 
 ## Archive / restore (reversible)
 Hubs and content are archive-only in core (no hard delete; deletion stays
@@ -391,8 +479,9 @@ def get_srgplus_guide() -> str:
     Assets / Featured Content with named sections (versions), asset upload,
     covers (from a Drive image or one of the 12 ready-made preset gradients),
     creating a new hub with its channels and categories, setting up a hub
-    profile (bio, links, avatar and cover sizes / safe area), archive/restore,
-    and common pitfalls.
+    profile (bio, links, avatar and cover sizes / safe area), the hub profile
+    widgets (content cards and the other sections of a brand page),
+    archive/restore, and common pitfalls.
 
     Call this once before authoring or editing content if you are unsure of the
     workflow or a widget's shape — it is the authoritative reference and ships

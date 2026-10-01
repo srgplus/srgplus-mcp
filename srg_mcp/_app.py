@@ -51,6 +51,12 @@ Pitfalls that cause real damage — read before writing:
   `links` (like `context`) REPLACES the whole link list, so read get_hub_profile first and send
   the full list back. Avatar/cover from the hub's own Drive: set_hub_avatar / set_hub_cover
   (another hub's asset is refused). Sizes and the cover safe area: get_srgplus_guide().
+- Hub profile widgets (the sections of a brand page: text, links, content cards, profiles,
+  video, contacts): read them in full with get_hub_profile_widgets, then change ONE with
+  add_hub_profile_widget / update_hub_profile_widget / set_hub_profile_content_widget (the
+  page's content cards, in order) / remove_hub_profile_widget / reorder_hub_profile_widgets;
+  the other widgets stay as stored. update_hub_profile(widgets=...) REPLACES them all.
+  Removing a widget never deletes the contents it shows.
 - Text `content` is GitHub Flavored Markdown plus ==highlight== (full rules: get_srgplus_guide).
   Leave a blank line before and after tables, lists and `---` rules, write a pipe inside a table
   cell as \\|, and when editing a Text widget send the parts you did not change back byte for byte
@@ -77,6 +83,11 @@ Pitfalls that cause real damage — read before writing:
   Do not reset all placements with update_content(channels=...) and re-add them.
 - Renaming a category or channel: rename_category / rename_channel (only the name changes).
   Never create a new category and move the contents just to rename one.
+- A channel's icon (SF Symbol, emoji or photo on a colour) and link: set_channel_icon /
+  remove_channel_icon, set_channel_slug. Order: reorder_channels, reorder_categories. A
+  category's pin, view (grid / list / scroll), card size, open view, cover shape, progression
+  and notifications: update_category_settings. Each changes only what is passed;
+  get_channel shows the icon, the link and every category's settings in the same words.
 - Removing Drive files: archive_drive_files (to the bin, reversible; restore_drive_files undoes
   it) then delete_drive_files (permanent, frees storage; only archived files, or pass
   archive_first=True for one step). list_drive_files(archived=True) lists the bin. Confirm the

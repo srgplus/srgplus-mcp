@@ -316,10 +316,12 @@ def get_hub_profile(hub_profile_id: str, workspace_id: str) -> dict:
     (the bio), primary_url (website), visibility, avatar and cover
     ({url, extension, width, height, source_asset_id} or null when not set),
     links ([{$type, id, title, url, platform}], the profile's link list),
-    buttons, other_widgets (id/type/title only), created, modified and
-    `version`. Pass `version` as expected_version to update_hub_profile /
-    set_hub_avatar / set_hub_cover to get a 409 instead of overwriting
-    someone else's edit. Image URLs are signed and expire after ~7 days.
+    buttons, other_widgets (id/type/title only: get_hub_profile_widgets reads
+    them in full, e.g. which contents a ContentWidget shows), created,
+    modified and `version`. Pass `version` as expected_version to
+    update_hub_profile / set_hub_avatar / set_hub_cover and the widget tools
+    to get a 409 instead of overwriting someone else's edit. Image URLs are
+    signed and expire after ~7 days.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     return _profile_out(_get(hub_profile_id, workspace_id))
@@ -400,11 +402,21 @@ def create_hub_profile(
         "Private" (members only); pass "Private" for an internal hub
     primary_url: optional external URL shown on the profile
     app_clip_on: enable iOS App Clip
-    widgets: profile widget configuration objects
+    widgets: the page's first widgets, in order. Only Text
+        {"$type": "Text", "content": "<markdown>"}, LinkList
+        {"$type": "LinkList", "links": [{"title": "...", "url": "https://..."}]}
+        and Contact can be set at creation; add ContentWidget, HubProfile and
+        Media widgets afterwards with add_hub_profile_widget /
+        set_hub_profile_content_widget. Shapes: get_srgplus_guide().
     buttons: action buttons, each
         {"title": "...", "logic": {"type": "...", "url": "..."}}
     """
     from srg.schemas.hub_profile import ActionButtonLogicUpsert, ActionButtonUpsert
+
+    from srg_mcp.hub_widgets import CREATE_TYPES, widgets_in
+
+    if widgets is not None:
+        widgets = widgets_in(widgets, allowed=CREATE_TYPES, keep_id=False)
 
     btn_objs = (
         [
@@ -451,13 +463,14 @@ def update_hub_profile(
     primary_url: str | None = None,
     visibility: str | None = None,
     links: list[dict] | None = None,
+    widgets: list[dict] | None = None,
     buttons: list[dict] | None = None,
     avatar_image: str | None = None,
     cover_image: str | None = None,
     expected_version: int | None = None,
 ) -> dict:
     """Edit a hub profile. Only the fields you pass change; everything you
-    omit (avatar, cover, links, buttons, other widgets, visibility, user_name)
+    omit (avatar, cover, links, buttons, widgets, visibility, user_name)
     keeps its stored value.
 
     name: 2-150 chars. user_name: the URL slug srgplus.com/<user_name>, 2-150
@@ -472,6 +485,16 @@ def update_hub_profile(
         REPLACES the whole link list — to add one, get_hub_profile first,
         append, and send the full list back (keep each link's `id` to keep it).
         [] removes the link list. Other widgets are never touched.
+    widgets: REPLACES ALL widgets of the page (the link list included), in this
+        order; a widget you leave out is removed. Read them with
+        get_hub_profile_widgets and send them back changed: keep each `id` to
+        keep a widget, leave `id` out for a new one (max 20; shapes in
+        get_srgplus_guide()). Every widget is resolved again, so one reference
+        to a deleted content anywhere fails the whole write. To change one
+        widget, prefer add_hub_profile_widget / update_hub_profile_widget /
+        set_hub_profile_content_widget / remove_hub_profile_widget /
+        reorder_hub_profile_widgets: they leave the other widgets as stored.
+        Cannot be combined with links.
     buttons: REPLACES all action buttons (max 3), each
         {"title": "...", "logic": {"$type": "OpenLink", "url": "https://..."}}.
     avatar_image / cover_image: a public http(s) image URL; downloaded and
@@ -499,8 +522,14 @@ def update_hub_profile(
         if code is None:
             raise ValueError('visibility must be "Public" or "Private".')
         body["availabilityLevel"] = code
+    if links is not None and widgets is not None:
+        raise ValueError("Pass either links or widgets (the whole list, link list included), not both.")
     if links is not None:
         body["links"] = _links_in(links)
+    if widgets is not None:
+        from srg_mcp.hub_widgets import widgets_in
+
+        body["widgets"] = widgets_in(widgets)
     if buttons is not None:
         body["buttons"] = buttons
 

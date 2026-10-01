@@ -31,11 +31,23 @@ EXPECTED_CORE = {
     "update_hub_profile",
     "set_hub_avatar",
     "set_hub_cover",
+    "get_hub_profile_widgets",
+    "add_hub_profile_widget",
+    "update_hub_profile_widget",
+    "set_hub_profile_content_widget",
+    "remove_hub_profile_widget",
+    "reorder_hub_profile_widgets",
     "create_hub_profile",
     "create_channel",
     "create_category",
     "rename_channel",
     "rename_category",
+    "set_channel_icon",
+    "remove_channel_icon",
+    "set_channel_slug",
+    "reorder_channels",
+    "reorder_categories",
+    "update_category_settings",
     "create_upload",
     "complete_upload",
     "set_cover",
@@ -94,11 +106,11 @@ async def test_full_mcp_unchanged_and_superset():
     assert "delete_hub_profile" not in names
     # Archive stays available in core (reversible).
     assert {"archive_content", "archive_channel", "archive_hub_profile"} <= EXPECTED_CORE
-    # Channel/category updates are a full replace on the backend (omitted
-    # fields reset), so core only CREATES structure until they keep them.
-    for full_replace in ("update_channel", "update_category"):
-        assert full_replace in names, f"{full_replace} should stay on full /mcp"
-        assert full_replace not in EXPECTED_CORE, f"{full_replace} must NOT be in core"
+    # The all-in-one channel/category updates stay on the full /mcp; core
+    # changes one thing at a time (rename, icon, link, order, settings).
+    for all_in_one in ("update_channel", "update_category"):
+        assert all_in_one in names, f"{all_in_one} should stay on full /mcp"
+        assert all_in_one not in EXPECTED_CORE, f"{all_in_one} must NOT be in core"
 
 
 def test_core_tools_share_wrapped_functions():
