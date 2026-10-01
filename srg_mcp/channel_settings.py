@@ -26,7 +26,7 @@ from mcp.types import ToolAnnotations
 
 from srg_mcp import _raw
 from srg_mcp._app import mcp
-from srg_mcp._category_options import with_changes
+from srg_mcp._category_options import settings_of, with_changes
 from srg_mcp.channels import (
     _category,
     _channel,
@@ -39,10 +39,8 @@ from srg_mcp.channels import (
 
 _OBJECT_ID = re.compile(r"^[0-9a-fA-F]{24}$")
 _HEX = re.compile(r"^#?([0-9a-fA-F]{6})$")
-_SYMBOL = re.compile(r"^[a-z0-9]+(\.[a-z0-9]+)*$")
 _SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _SLUG_MAX = 50
-_SYMBOL_MAX = 64
 _EMOJI_MAX = 32
 
 # The 12 colours the apps offer for a channel icon (Apple Reminders); blue is the default.
@@ -115,7 +113,7 @@ def set_channel_icon(
     Only the icon changes.
 
     Pass exactly ONE of:
-    - symbol: an SF Symbol name drawn on the colour, e.g. "star.fill". The apps offer
+    - symbol: one of the SF Symbols the apps offer, drawn on the colour:
       star.fill, heart.fill, bolt.fill, flame.fill, leaf.fill, moon.fill, sun.max.fill,
       cloud.fill, drop.fill, snowflake, pawprint.fill, fish.fill, house.fill, building.2.fill,
       cart.fill, bag.fill, gift.fill, creditcard.fill, book.fill, graduationcap.fill, pencil,
@@ -124,6 +122,8 @@ def set_channel_icon(
       figure.run, dumbbell.fill, sportscourt.fill, briefcase.fill, hammer.fill,
       wrench.and.screwdriver.fill, lightbulb.fill, megaphone.fill, bell.fill, flag.fill, globe,
       map.fill, mappin.and.ellipse, person.2.fill, chart.bar.fill. "#" gives a coloured "#".
+      Another name is refused (the apps would draw an empty circle): pick the closest or
+      use an emoji.
     - emoji: exactly one emoji drawn on the colour, e.g. "🚀".
     - photo_asset_id: the id of an uploaded image in THIS hub's Drive (list_drive_files, or
       create_upload → complete_upload first), shown as a round photo.
@@ -132,7 +132,8 @@ def set_channel_icon(
     To go back to the plain "#", use remove_channel_icon.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    given = [name for name, value in (("symbol", symbol), ("emoji", emoji), ("photo_asset_id", photo_asset_id)) if value]
+    kinds = (("symbol", symbol), ("emoji", emoji), ("photo_asset_id", photo_asset_id))
+    given = [name for name, value in kinds if value]
     if len(given) != 1:
         raise ValueError(
             "Pass exactly one of symbol, emoji or photo_asset_id"
@@ -141,11 +142,14 @@ def set_channel_icon(
 
     body: dict[str, Any]
     if symbol:
-        name = str(symbol).strip()
-        name = _HASH_SYMBOL if name.lower() in ("#", "hash", "number") else name
-        if len(name) > _SYMBOL_MAX or not _SYMBOL.match(name):
+        name = str(symbol).strip().lower()
+        name = _HASH_SYMBOL if name in ("#", "hash") else name
+        if name not in APP_SYMBOLS and name != _HASH_SYMBOL:
+            # The apps draw the name with Image(systemName:): an unknown one shows an
+            # empty circle, so only the symbols the apps offer are taken.
             raise ValueError(
-                f"symbol must be an SF Symbol name such as 'star.fill' (lower case, dots), got {symbol!r}."
+                f"symbol must be one the apps offer: {', '.join(APP_SYMBOLS)}, or '#'. Got {symbol!r}; "
+                "pick the closest one, or use an emoji instead."
             )
         body = {"kind": "symbol", "symbol": name}
     elif emoji:
@@ -228,7 +232,13 @@ def set_channel_slug(channel_id: str, slug: str, workspace_id: str) -> dict:
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     value = _slug(slug)
-    _raw.call(workspace_id, "PATCH", f"/api/v1/channels/{channel_id}", json={"slug": value})
+    try:
+        _raw.call(workspace_id, "PATCH", f"/api/v1/channels/{channel_id}", json={"slug": value})
+    except srg.exceptions.ConflictError as exc:
+        raise ValueError(
+            f"The link {value!r} is taken: another channel of this hub uses it as its name, link "
+            "or an old link. Nothing changed; pick another slug."
+        ) from exc
     channel = _channel(channel_id, workspace_id)
     return {
         "channel_id": channel_id,
@@ -241,29 +251,37 @@ def set_channel_slug(channel_id: str, slug: str, workspace_id: str) -> dict:
 # ---- order -----------------------------------------------------------------------------
 
 
-def _wanted(ids: list[str], known: dict[str, dict], what: str, where: str) -> list[str]:
-    """The listed ids as stored, in order; unknown or repeated ones fail before any write."""
+def _find(raw: Any, items: list[dict]) -> list[dict]:  # noqa: ANN401
+    """Items with this id, else with this exact name (any case)."""
+    key = str(raw).strip()
+    by_id = [i for i in items if str(i.get("id", "")).lower() == key.lower()]
+    return by_id or [i for i in items if str(i.get("name", "")).strip().casefold() == key.casefold()]
+
+
+def _wanted(ids: list[str], active: list[dict], archived: list[dict], what: str, where: str) -> list[str]:
+    """The listed ids (or exact names) as stored ids, in order. Unknown, repeated, ambiguous
+    or archived ones fail before any write."""
     if not isinstance(ids, list) or not ids:
         raise ValueError(f"Pass the {what} ids in the new order (at least one).")
     wanted: list[str] = []
-    unknown: list[str] = []
-    repeated: list[str] = []
+    problems: dict[str, list[str]] = {}
     for raw in ids:
-        item = known.get(str(raw).strip().lower())
-        if item is None:
-            unknown.append(str(raw))
-        elif item["id"] in wanted:
-            repeated.append(str(raw))
+        found = _find(raw, active)
+        if len(found) == 1:
+            if found[0]["id"] in wanted:
+                problems.setdefault("listed twice", []).append(str(raw))
+            else:
+                wanted.append(found[0]["id"])
+        elif found:
+            problems.setdefault("several have this name, pass the id", []).append(str(raw))
+        elif _find(raw, archived):
+            problems.setdefault("archived, so not in the order (restore it first)", []).append(str(raw))
         else:
-            wanted.append(item["id"])
-    if unknown or repeated:
-        names = ", ".join(f"{i.get('name')!r} ({i['id']})" for i in known.values())
-        problems = []
-        if unknown:
-            problems.append(f"not in {where}: {', '.join(unknown)}")
-        if repeated:
-            problems.append(f"listed twice: {', '.join(repeated)}")
-        raise ValueError(f"Nothing was moved. {'; '.join(problems)}. The {what}s: {names}.")
+            problems.setdefault(f"not in {where}", []).append(str(raw))
+    if problems:
+        names = ", ".join(f"{i.get('name')!r} ({i['id']})" for i in active)
+        listed = "; ".join(f"{why}: {', '.join(items)}" for why, items in problems.items())
+        raise ValueError(f"Nothing was moved. {listed}. The {what}s: {names}.")
     return wanted
 
 
@@ -280,29 +298,19 @@ def reorder_categories(channel_id: str, category_ids: list[str], workspace_id: s
     """Change the order of a channel's categories (as in Edit Channel in the apps).
     Only the order changes: names, contents, settings and archive state stay.
 
-    category_ids: categories of this channel in the new order (from get_channel). The listed
-        ones come first in that order; the others keep their order after them. Archived
-        categories have no place in the order (restore_category first).
+    category_ids: categories of this channel in the new order (ids from get_channel, or exact
+        names). The listed ones come first in that order; the others keep their order after
+        them. Archived categories have no place in the order (restore_category first).
     The pinned category always shows first in the apps, whatever its place.
     Returns the new order of the channel's categories.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    if not isinstance(category_ids, list) or not category_ids:
-        raise ValueError("Pass the category ids in the new order (at least one); get_channel lists them.")
-    listed = {str(i).strip().lower() for i in category_ids}
     for attempt in (1, 2):
         channel = _channel(channel_id, workspace_id)
         categories = channel.get("categories") or []
         active = [c for c in categories if not c.get("isArchived")]
         archived = [c for c in categories if c.get("isArchived")]
-        known = {str(c["id"]).lower(): c for c in active}
-        archived_listed = [c.get("name") for c in archived if str(c["id"]).lower() in listed]
-        if archived_listed:
-            raise ValueError(
-                f"Archived categories have no place in the order: {', '.join(map(repr, archived_listed))}. "
-                "Restore them first (restore_category) or leave them out."
-            )
-        wanted = _wanted(category_ids, known, "category", f"channel {channel.get('name')!r}")
+        wanted = _wanted(category_ids, active, archived, "category", f"channel {channel.get('name')!r}")
         order = wanted + [c["id"] for c in active if c["id"] not in wanted]
         by_id = {c["id"]: c for c in active}
         result = {
@@ -321,12 +329,21 @@ def reorder_categories(channel_id: str, category_ids: list[str], workspace_id: s
         }
         try:
             _raw.call(workspace_id, "PUT", "/api/v1/channels", json=body)
-        except srg.exceptions.BadRequestError:
-            # The backend refuses a list that misses a category: one was added or deleted
-            # since the read. Read again once.
-            if attempt == 2:
-                raise
-            continue
+        except srg.exceptions.BadRequestError as exc:
+            if "can not be added or deleted" in exc.message and attempt == 1:
+                # A category was added or deleted since the read: read again once.
+                continue
+            raise ValueError(
+                f"Nothing was moved: {exc.message}. The order is saved together with the channel's "
+                "name, so a name that breaks today's rules (1-50 characters, no / or \\) has to be "
+                "fixed first with rename_channel."
+            ) from exc
+        except srg.exceptions.ConflictError as exc:
+            raise ValueError(
+                f"Nothing was moved: {exc.message}. The order is saved together with the channel's "
+                "name, which another channel of the hub also uses (as its name or link); rename one "
+                "of them first (rename_channel)."
+            ) from exc
         return {**result, "changed": True}
     raise AssertionError("unreachable")
 
@@ -344,42 +361,53 @@ def reorder_channels(hub_profile_id: str, channel_ids: list[str], workspace_id: 
     """Change the order of a hub's channels (the channel list and tabs in the apps).
     Only the order changes.
 
-    channel_ids: channels of this hub in the new order (from list_channels). The listed ones
-        come first in that order; the others keep their order after them. Archived channels
-        have no place in the order.
+    channel_ids: channels of this hub in the new order (ids from list_channels, or exact
+        names). The listed ones come first in that order; the others keep their order after
+        them. Archived channels have no place in the order.
     Only the hub owner or an admin can reorder channels (others get 403).
     Returns the new order.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     channels = _raw.call(
-        workspace_id, "GET", f"/api/v1/channels/{hub_profile_id}", params={"includeArchived": "false"}
+        workspace_id, "GET", f"/api/v1/channels/{hub_profile_id}", params={"includeArchived": "true"}
     ) or []
-    active = [c for c in channels if isinstance(c, dict) and c.get("id") and not c.get("isArchived")]
-    known = {str(c["id"]).lower(): c for c in active}
-    wanted = _wanted(channel_ids, known, "channel", "this hub")
+    channels = [c for c in channels if isinstance(c, dict) and c.get("id")]
+    active = [c for c in channels if not c.get("isArchived")]
+    archived = [c for c in channels if c.get("isArchived")]
+    wanted = _wanted(channel_ids, active, archived, "channel", "this hub")
+    names = {c["id"]: c.get("name") for c in active}
 
     order = [c["id"] for c in active]
-    moved = 0
+    moved: list[str] = []
     for index, channel_id in enumerate(wanted):
         previous = wanted[index - 1] if index else None
         position = order.index(channel_id)
         if (order[position - 1] if position else None) == previous:
             continue
-        _raw.call(
-            workspace_id,
-            "POST",
-            f"/api/v1/channels/{channel_id}/move",
-            json={"previousChannelId": previous},
-        )
-        moved += 1
+        try:
+            _raw.call(
+                workspace_id,
+                "POST",
+                f"/api/v1/channels/{channel_id}/move",
+                json={"previousChannelId": previous},
+            )
+        except srg.exceptions.APIStatusError as exc:
+            done = (
+                f"Already moved: {', '.join(repr(names[i]) for i in moved)}." if moved else "Nothing was moved."
+            )
+            if isinstance(exc, srg.exceptions.ForbiddenError):
+                raise ValueError(
+                    f"Only the hub owner or an admin can reorder channels (403). {done}"
+                ) from exc
+            raise RuntimeError(f"Moving {names[channel_id]!r} failed: {exc.message}. {done}") from exc
+        moved.append(channel_id)
         order.pop(position)
         order.insert(order.index(previous) + 1 if previous else 0, channel_id)
 
-    names = {c["id"]: c.get("name") for c in active}
     return {
         "hub_profile_id": hub_profile_id,
         "order": [{"id": i, "name": names[i]} for i in order],
-        "moved": moved,
+        "moved": len(moved),
     }
 
 
@@ -420,13 +448,16 @@ def update_category_settings(
     card_size: "large" or "small" cards, for the grid and list views.
     open_view: how the category shows when opened (See all): "grid" or "list".
     cover_ratio: the shape of the card covers, width:height: "16:9", "9:16", "3:2", "2:3",
-        "5:4", "4:5", "square" or "original". The same on every device.
+        "5:4", "4:5", "square" or "original" (or the apps' label with a turn, like
+        "16:9 vertical" = 9:16). The same on every device.
     expandable: whether people can open (enlarge) the category.
     progression: show progress (done/not done) on its contents.
     sequential: members must finish the contents in order (turns progression on).
     notifications: push channel members when content is added. email: also email them.
     To rename use rename_category; to archive use archive_category.
-    Returns all the category's settings after the change (and which category lost its pin).
+    category_id: the category's id (from get_channel) or its exact name.
+    Returns all the category's settings after the change, `changed` (False: it was already
+    so, nothing written) and which category lost its pin.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     changes = {
@@ -446,6 +477,15 @@ def update_category_settings(
     channel = _channel(channel_id, workspace_id)
     category = _category(channel, category_id)
     options = with_changes(category.get("options"), **changes)
+    same = (
+        options == with_changes(category.get("options"))
+        and (pinned is None or bool(pinned) == bool(category.get("isPinned")))
+        and (notifications is None or bool(notifications) == bool(category.get("notificationsEnabled")))
+        and (email is None or bool(email) == bool(category.get("emailEnabled")))
+    )
+    if same:
+        # Already so: no write (the category PUT would still notify every app).
+        return {"category_id": category["id"], "name": category.get("name"), **settings_of(category), "changed": False}
     sent = write_category(
         channel_id,
         category,
@@ -455,7 +495,7 @@ def update_category_settings(
         email=email,
         options=options,
     )
-    result = settings_after(category, sent)
+    result = {**settings_after(category, sent), "changed": True}
     if pinned:
         unpinned = [
             c.get("name")

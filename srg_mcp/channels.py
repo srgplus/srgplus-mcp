@@ -8,6 +8,7 @@ from srg_mcp._client import get_client
 from mcp.types import ToolAnnotations
 
 _LINK = "https://srgplus.com/{user}/channels/{slug}"
+_PRIVACY = {"public": "Public", "private": "Private"}
 
 
 def _hub_profile_id(channel_id: str, workspace_id: str, channel: dict | None = None) -> str:
@@ -47,19 +48,29 @@ def _channel(channel_id: str, workspace_id: str) -> dict:
 
 
 def _category(channel: dict, category_id: str) -> dict:
-    wanted = str(category_id).strip().lower()
-    for category in channel.get("categories") or []:
-        if str(category.get("id", "")).lower() == wanted:
+    """The channel's category with this id, or with this exact name when only one has it."""
+    categories = channel.get("categories") or []
+    wanted = str(category_id).strip()
+    for category in categories:
+        if str(category.get("id", "")).lower() == wanted.lower():
             return category
-    names = ", ".join(f"{c.get('name')!r} ({c.get('id')})" for c in channel.get("categories") or [])
+    named = [c for c in categories if str(c.get("name", "")).strip().casefold() == wanted.casefold()]
+    if len(named) == 1:
+        return named[0]
+    names = ", ".join(f"{c.get('name')!r} ({c.get('id')})" for c in categories)
+    if named:
+        raise ValueError(f"Several categories are called {wanted!r}; pass the id. Its categories: {names}.")
     raise ValueError(
         f"Category {category_id} is not in channel {channel.get('name')!r}. Its categories: {names or 'none'}."
     )
 
 
 def channel_link(channel: dict) -> str | None:
-    user, slug = channel.get("hubProfileUserName"), channel.get("slug")
-    return _LINK.format(user=user, slug=slug) if user and slug else None
+    """srgplus.com/<user>/channels/<slug>; a channel with no slug yet is reached by its name
+    (the apps link it the same way)."""
+    user = channel.get("hubProfileUserName")
+    key = channel.get("slug") or channel.get("name")
+    return _LINK.format(user=user, slug=quote(str(key), safe="")) if user and key else None
 
 
 def icon_out(icon: dict | None) -> dict | None:
@@ -89,6 +100,12 @@ def write_category(
     The endpoint replaces the whole category (an omitted isPinned unpins it, options reset),
     so every field goes back as read.
     """
+    if pinned and category.get("isArchived"):
+        # The backend unpins the channel's other categories first, so pinning an archived
+        # one would leave the channel with no visible pinned category.
+        raise ValueError(
+            f"Category {category.get('name')!r} is archived; restore it first (restore_category), then pin it."
+        )
     body: dict[str, Any] = {
         "name": category.get("name") if name is None else name,
         "isPinned": bool(category.get("isPinned")) if pinned is None else bool(pinned),
@@ -263,22 +280,26 @@ def create_channel(
 def update_channel(
     channel_id: str,
     hub_profile_id: str,
-    name: str,
     workspace_id: str,
+    name: str | None = None,
     privacy: str | None = None,
     categories: list[Any] | None = None,
 ) -> dict | None:
     """Update a channel's name, privacy and category order in one call.
 
     Prefer the one-thing tools: rename_channel (name), reorder_categories (order),
-    set_channel_icon / set_channel_slug (look). Here the name is always written (pass the
-    current one to keep it); privacy and the category order change only when passed, and
-    every category keeps its archive state.
+    set_channel_icon / set_channel_slug (look). Only what you pass changes: the name,
+    privacy and category order keep their stored values when left out, and every
+    category keeps its archive state.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Public" or "Private"
     categories: the categories in the new order: ids, or {"id": "...", "order": 0} objects
         (sorted by order). Listed ones come first, the others keep their order after them.
     """
+    if privacy is not None:
+        privacy = _PRIVACY.get(str(privacy).strip().lower())
+        if privacy is None:
+            raise ValueError('privacy must be "Public" or "Private".')
     channel = _channel(channel_id, workspace_id)
     stored = channel.get("categories") or []
     active = [c for c in stored if not c.get("isArchived")]
@@ -301,7 +322,8 @@ def update_channel(
     body: dict[str, Any] = {
         "channelId": channel["id"],
         "hubProfileId": hub_profile_id,
-        "name": name,
+        # Unchanged, the backend keeps it byte for byte (and the link with it).
+        "name": channel.get("name") if name is None else name,
         "categories": [{"categoryId": i, "isArchived": False} for i in order]
         + [{"categoryId": c["id"], "isArchived": True} for c in archived],
     }
@@ -497,8 +519,8 @@ def create_category(
 def update_category(
     channel_id: str,
     category_id: str,
-    name: str,
     workspace_id: str,
+    name: str | None = None,
     is_pinned: bool | None = None,
     notifications_enabled: bool | None = None,
     view_type: str | None = None,
@@ -509,8 +531,7 @@ def update_category(
     """Update a category's name, pin status, notifications and display options.
 
     Prefer update_category_settings (any setting, nothing else changes) and rename_category.
-    Here the name is always written (pass the current one to keep it); every other field
-    changes only when passed and otherwise keeps its stored value.
+    Only what you pass changes; everything left out keeps its stored value.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     view_type: "grid", "list" or "scroll"
     progression_enabled: track user completion progress

@@ -131,13 +131,18 @@ def get_content_v2(content_id: str, workspace_id: str) -> dict:
     Also returns `version`: pass it as expected_version to update_content /
     set_cover so a stale write fails with 409 instead of overwriting someone
     else's newer edit. `cover.source_asset_id` is the Drive image the cover was
-    set from (re-apply it with set_cover).
+    set from (re-apply it with set_cover). `action_buttons` are the content's
+    buttons ({"title", "logic": {"$type": "OpenLink" | "Media" | "OpenForm", ...}});
+    send them back with update_content(action_buttons=...) when adding one.
     """
     data = _raw.call(workspace_id, "GET", f"/api/v2/contents/{content_id}") or {}
     result = ContentV2.model_validate(data).model_dump(mode="json")
     # Fields newer than the pinned SDK's model: pass them through.
     if data.get("version") is not None:
         result["version"] = data["version"]
+    # Always present, so "no buttons" is never mistaken for "not read": an
+    # update_content(action_buttons=...) REPLACES the list.
+    result["action_buttons"] = data.get("actionButtons") or []
     source = (data.get("cover") or {}).get("sourceAssetId")
     if source and isinstance(result.get("cover"), dict):
         result["cover"]["source_asset_id"] = source
@@ -291,8 +296,9 @@ def update_content(
         Pass cover_image OR cover_asset_id, not both.
     action_buttons: the buttons on the content (at most 3), REPLACES the list:
         [{"title": "Buy", "url": "https://..."}, {"title": "Watch", "asset_id": "<a video in
-        the hub's Drive>"}, {"title": "Apply", "form_id": "..."}]; [] removes them all. To add
-        one, read the current ones (get_content_v2 `actionButtons`) and send them all back.
+        the hub's Drive>"}, {"title": "Apply", "form_id": "<an SRG+ form>"}]; [] removes them
+        all. To add one, read the current ones (get_content_v2 `action_buttons`) and send them
+        all back with the new one.
     clear_main_asset: True takes the main asset (the playable video/file) off the content;
         the file stays in Drive. Not together with main_asset_id.
     expected_version: the `version` from get_content_v2. When set, the update

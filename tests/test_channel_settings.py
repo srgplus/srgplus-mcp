@@ -26,6 +26,7 @@ USER = "brand"
 CH = "6a00000000000000000000c1"
 CH2 = "6a00000000000000000000c2"
 CH3 = "6a00000000000000000000c3"
+CH_OLD = "6a00000000000000000000c9"
 CAT_A = "6a00000000000000000000a1"
 CAT_B = "6a00000000000000000000a2"
 CAT_C = "6a00000000000000000000a3"
@@ -311,6 +312,10 @@ class FakeContentHub:
             {"id": CH2, "name": "Video", "isArchived": False},
             {"id": CH3, "name": "Shop", "isArchived": False},
         ]
+        self.archived_channels = [{"id": CH_OLD, "name": "Old shop", "isArchived": True}]
+        self.taken_slugs: set[str] = set()
+        self.channel_put_error: Exception | None = None
+        self.refused_moves: dict[str, Exception] = {}
 
     def channel(self) -> dict:
         return {
@@ -336,9 +341,9 @@ class FakeContentHub:
         if (method, path) == ("GET", f"/api/v1/hub-profiles/username/{USER}"):
             return {"id": HUB, "userName": USER}
         if (method, path) == ("GET", f"/api/v1/channels/{HUB}"):
-            assert params == {"includeArchived": "false"}
+            rows = self.channels + ([] if params == {"includeArchived": "false"} else self.archived_channels)
             return [dict(c, slug=c["name"].lower(), hubProfileUserName=USER, privacy="Public", categories=[])
-                    for c in self.channels]
+                    for c in rows]
         if (method, path) == ("PUT", f"/api/v1/channels/{CH}/icon"):
             self.icon = dict(json)
             return None
@@ -346,9 +351,14 @@ class FakeContentHub:
             self.icon = None
             return None
         if (method, path) == ("PATCH", f"/api/v1/channels/{CH}"):
+            if json["slug"] in self.taken_slugs:
+                raise _error(srg.exceptions.ConflictError, 409,
+                             f"Another channel of this profile already uses the name or link {json['slug']}")
             self.slug = json["slug"]
             return None
         if (method, path) == ("PUT", "/api/v1/channels"):
+            if self.channel_put_error:
+                raise self.channel_put_error
             if self.bad_requests_left:
                 self.bad_requests_left -= 1
                 raise _error(srg.exceptions.BadRequestError, 400,
@@ -384,6 +394,8 @@ class FakeContentHub:
             return category_id
         if method == "POST" and path.endswith("/move"):
             moved = path.split("/")[-2]
+            if moved in self.refused_moves:
+                raise self.refused_moves[moved]
             previous = json["previousChannelId"]
             order = [c for c in self.channels if c["id"] != moved]
             index = 0 if previous is None else [c["id"] for c in order].index(previous) + 1
@@ -453,7 +465,8 @@ def test_hex_colour_is_normalized(hub):
     [
         ({}, "exactly one"),
         ({"symbol": "star.fill", "emoji": "⭐"}, "exactly one"),
-        ({"symbol": "Star Fill"}, "SF Symbol"),
+        ({"symbol": "Star Fill"}, "apps offer"),
+        ({"symbol": "rocket.fill"}, "apps offer"),
         ({"photo_asset_id": "not-an-id"}, "24-character"),
         ({"symbol": "star.fill", "color": "turquoise-ish"}, "#RRGGBB"),
     ],
@@ -542,7 +555,7 @@ def test_reorder_categories_refuses_unknown_repeated_and_archived_ids(hub):
         cs.reorder_categories(CH, [CAT_A, "6a00000000000000000000ff"], WS)
     with pytest.raises(ValueError, match="listed twice"):
         cs.reorder_categories(CH, [CAT_A, CAT_A], WS)
-    with pytest.raises(ValueError, match="Archived categories"):
+    with pytest.raises(ValueError, match="archived, so not in the order"):
         cs.reorder_categories(CH, [CAT_OLD], WS)
     with pytest.raises(ValueError, match="at least one"):
         cs.reorder_categories(CH, [], WS)
@@ -653,7 +666,7 @@ def test_notifications_and_email(hub):
 
 
 def test_update_category_keeps_pin_and_notifications_it_is_not_given(hub):
-    out = channels.update_category(CH, CAT_A, "Reels 2", WS, view_type="Grid")
+    out = channels.update_category(CH, CAT_A, WS, name="Reels 2", view_type="Grid")
 
     stored = _stored(hub, CAT_A)
     assert stored["name"] == "Reels 2"
@@ -663,7 +676,7 @@ def test_update_category_keeps_pin_and_notifications_it_is_not_given(hub):
 
 
 def test_update_channel_sends_category_ids_with_archive_flags(hub):
-    channels.update_channel(CH, HUB, "Role", WS, categories=[{"id": CAT_B, "order": 1}, {"id": CAT_C, "order": 0}])
+    channels.update_channel(CH, HUB, WS, categories=[{"id": CAT_B, "order": 1}, {"id": CAT_C, "order": 0}])
 
     (put,) = hub.writes()
     assert put[2]["categories"] == [
@@ -675,7 +688,7 @@ def test_update_channel_sends_category_ids_with_archive_flags(hub):
 
 
 def test_update_channel_without_categories_keeps_their_order(hub):
-    channels.update_channel(CH, HUB, "Role", WS, privacy="Public")
+    channels.update_channel(CH, HUB, WS, privacy="public")
 
     (put,) = hub.writes()
     assert put[2]["privacy"] == "Public"
@@ -746,3 +759,146 @@ def test_a_flag_the_read_did_not_carry_is_not_guessed(hub):
     (put,) = hub.writes()
     assert "emailEnabled" not in put[2], "left out, so the backend keeps the stored value"
     assert put[2]["notificationsEnabled"] is False
+
+
+# --------------------------------------------------------------------------
+# Review findings: voice-safe errors and no surprise changes
+# --------------------------------------------------------------------------
+
+
+def test_symbol_any_case_is_the_apps_symbol(hub):
+    cs.set_channel_icon(CH, WS, symbol="Star.Fill", color="blue")
+
+    assert hub.icon["symbol"] == "star.fill"
+
+
+def test_a_taken_slug_says_pick_another_not_retry(hub):
+    hub.taken_slugs.add("video")
+
+    with pytest.raises(ValueError, match="'video' is taken.*pick another"):
+        cs.set_channel_slug(CH, "Video", WS)
+    assert hub.slug == "role"
+
+
+def test_pinning_an_archived_category_is_refused_and_the_live_pin_stays(hub):
+    with pytest.raises(ValueError, match="archived; restore it first"):
+        cs.update_category_settings(CH, CAT_OLD, WS, pinned=True)
+
+    assert hub.writes() == []
+    assert _stored(hub, CAT_A)["isPinned"] is True
+
+
+def test_a_setting_that_is_already_so_writes_nothing(hub):
+    out = cs.update_category_settings(CH, CAT_A, WS, pinned=True, view="grid")
+
+    assert out["changed"] is False and out["pinned"] is True and out["view"] == "grid"
+    assert hub.writes() == []
+
+
+def test_categories_by_exact_name(hub):
+    out = cs.update_category_settings(CH, "guides", WS, view="list")
+
+    assert out["category_id"] == CAT_B and out["changed"] is True
+    assert cs.reorder_categories(CH, ["News", "reels"], WS)["order"][0]["name"] == "News"
+
+
+def test_two_categories_with_one_name_need_the_id(hub):
+    hub.categories.append(_category("6a00000000000000000000a4", "Guides"))
+
+    with pytest.raises(ValueError, match="Several categories are called 'Guides'"):
+        cs.update_category_settings(CH, "Guides", WS, pinned=True)
+    with pytest.raises(ValueError, match="several have this name"):
+        cs.reorder_categories(CH, ["Guides"], WS)
+    assert hub.writes() == []
+
+
+def test_reorder_categories_retries_only_after_a_concurrent_change(hub):
+    hub.channel_put_error = _error(srg.exceptions.BadRequestError, 400, "Channel name must be 1-50 characters")
+
+    with pytest.raises(ValueError, match="rename_channel"):
+        cs.reorder_categories(CH, [CAT_B], WS)
+    assert len(hub.writes()) == 1, "a 400 that is not the concurrent-change one is not retried"
+
+    hub.calls.clear()
+    hub.channel_put_error = _error(srg.exceptions.ConflictError, 409, "Channel with name Role already exists")
+    with pytest.raises(ValueError, match="rename one of them first"):
+        cs.reorder_categories(CH, [CAT_B], WS)
+
+
+def test_reorder_channels_names_and_archived_ones(hub):
+    out = cs.reorder_channels(HUB, ["shop", "Role"], WS)
+    assert [c["name"] for c in out["order"]] == ["Shop", "Role", "Video"]
+
+    with pytest.raises(ValueError, match="archived, so not in the order"):
+        cs.reorder_channels(HUB, [CH_OLD], WS)
+
+
+def test_reorder_channels_403_says_who_may(hub):
+    hub.refused_moves[CH3] = _error(srg.exceptions.ForbiddenError, 403, "Forbidden")
+
+    with pytest.raises(ValueError, match="Only the hub owner or an admin.*Nothing was moved"):
+        cs.reorder_channels(HUB, [CH3], WS)
+
+
+def test_reorder_channels_failure_part_way_says_what_moved(hub):
+    hub.refused_moves[CH2] = _error(srg.exceptions.NotFoundError, 404, "Channel not found")
+
+    with pytest.raises(RuntimeError, match="Moving 'Video' failed.*Already moved: 'Shop'"):
+        cs.reorder_channels(HUB, [CH3, CH2, CH], WS)
+    assert [c["id"] for c in hub.channels] == [CH3, CH, CH2]
+
+
+def test_link_falls_back_to_the_name_like_the_apps(hub):
+    hub.slug = None
+
+    out = channels.get_channel(CH, WS)
+
+    assert out["link"] == f"https://srgplus.com/{USER}/channels/Role"
+    assert channels.channel_link({"hubProfileUserName": USER, "name": "Мой канал 🎬"}) == (
+        f"https://srgplus.com/{USER}/channels/%D0%9C%D0%BE%D0%B9%20%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%20%F0%9F%8E%AC"
+    )
+
+
+def test_update_channel_checks_privacy_and_keeps_the_name(hub):
+    with pytest.raises(ValueError, match='"Public" or "Private"'):
+        channels.update_channel(CH, HUB, WS, privacy="2")
+    assert hub.writes() == []
+
+    channels.update_channel(CH, HUB, WS, privacy="PRIVATE")
+    (put,) = hub.writes()
+    assert put[2]["privacy"] == "Private" and put[2]["name"] == "Role"
+
+
+def test_update_category_refuses_to_pin_an_archived_one(hub):
+    with pytest.raises(ValueError, match="restore it first"):
+        channels.update_category(CH, CAT_OLD, WS, is_pinned=True)
+    assert hub.writes() == []
+
+
+def test_a_scroll_categorys_hidden_card_size_does_not_come_back():
+    stored = _custom("Classic", "Compact", "Waterfall")
+
+    out = opts.with_changes(stored, view="grid")
+
+    assert _presentation(out) == {"$type": "Standard", "global": {"type": "Waterfall"}}
+
+
+@pytest.mark.parametrize(
+    "said,ratio,position",
+    [
+        ("16:9 vertical", "SixteenByNine", "Vertical"),
+        ("16:9 Horizontal", "SixteenByNine", "Horizontal"),
+        ("4:5 horizontal", "FourByFive", "Horizontal"),
+        ("3:2 portrait", "ThreeByTwo", "Vertical"),
+        ("16 x 9 landscape", "SixteenByNine", "Horizontal"),
+        ("square vertical", "Square", None),
+    ],
+)
+def test_cover_ratio_takes_the_apps_label_with_a_turn(said, ratio, position):
+    assert opts.ratio_of(said) == (ratio, position)
+
+
+@pytest.mark.parametrize("said", ["portrait", "16:9 vertical horizontal", "wide"])
+def test_cover_ratio_without_a_shape_is_refused(said):
+    with pytest.raises(ValueError, match="cover_ratio"):
+        opts.ratio_of(said)

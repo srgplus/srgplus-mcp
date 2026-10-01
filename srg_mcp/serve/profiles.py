@@ -28,8 +28,9 @@ the ready-made preset covers (list + apply, SRGDEV-940).
 Excluded on purpose: user/permission management, hard deletes of hubs and
 contents, moves, the
 low-level collection subcontent tools, workspace actions, the all-in-one
-``update_channel`` / ``update_category`` (the one-thing tools above cover them), and
-the deprecated ``create_*_asset`` registrars.
+``update_channel`` / ``update_category`` (core changes a channel's name, look and order and a
+category's settings one at a time; a channel's privacy stays on the full set), and the
+deprecated ``create_*_asset`` registrars.
 """
 
 from __future__ import annotations

@@ -456,3 +456,36 @@ def test_clear_main_asset(raw: _Recorder, sdk) -> None:
 
     with pytest.raises(ValueError, match="not both"):
         contents.update_content(CONTENT_ID, WS_ID, clear_main_asset=True, main_asset_id="65f0000000000000000000b1")
+
+
+_V2 = {
+    "id": CONTENT_ID,
+    "privacy": "Public",
+    "name": "Reel",
+    "createdBy": "u1",
+    "hubProfileId": HUB_ID,
+    "created": "2026-09-23T00:00:00Z",
+}
+
+
+def test_get_content_v2_shows_the_action_buttons_so_adding_one_keeps_them(monkeypatch, raw: _Recorder, sdk) -> None:
+    stored = [{"title": "Site", "logic": {"$type": "OpenLink", "url": "https://brand.example"}}]
+    raw.response = {**_V2, "version": 7, "actionButtons": stored}
+
+    read = contents.get_content_v2(CONTENT_ID, WS_ID)
+    assert read["action_buttons"] == stored
+
+    raw.response = {"id": CONTENT_ID, "context": []}
+    contents.update_content(
+        CONTENT_ID, WS_ID, action_buttons=[*read["action_buttons"], {"title": "Buy", "url": "https://shop.example"}]
+    )
+    assert raw.calls[-1]["json"]["actionButtons"] == [
+        {"title": "Site", "logic": {"$type": "OpenLink", "url": "https://brand.example"}},
+        {"title": "Buy", "logic": {"$type": "OpenLink", "url": "https://shop.example"}},
+    ]
+
+
+def test_get_content_v2_without_buttons_says_so(raw: _Recorder, sdk) -> None:
+    raw.response = dict(_V2)
+
+    assert contents.get_content_v2(CONTENT_ID, WS_ID)["action_buttons"] == []

@@ -77,16 +77,35 @@ def _pick(value: Any, table: dict[str, str], name: str, choices: str) -> str:  #
     return picked
 
 
+_ORIENTATION_WORDS = {
+    "vertical": "Vertical",
+    "portrait": "Vertical",
+    "horizontal": "Horizontal",
+    "landscape": "Horizontal",
+}
+
+
 def ratio_of(value: Any) -> tuple[str, str | None]:  # noqa: ANN401
-    """"16:9", "9x16", "4/5", "square", "original" → (ratio, position)."""
-    key = _key(value).replace(" ", "").replace("x", ":").replace("/", ":").replace("×", ":")
-    picked = RATIOS.get(key)
-    if picked is None:
+    """The card shape → (ratio, position).
+
+    "16:9", "9x16", "4/5", "square", "original": the shape as width:height. With an
+    orientation word, as the apps label it ("16:9 vertical", "4:5 horizontal",
+    "3:2 portrait"): the ratio turned that way.
+    """
+    words = _key(value).replace(",", " ").split()
+    turn = [_ORIENTATION_WORDS[w] for w in words if w in _ORIENTATION_WORDS]
+    shape = "".join(w for w in words if w not in _ORIENTATION_WORDS)
+    shape = shape.replace("x", ":").replace("/", ":").replace("×", ":")
+    picked = RATIOS.get(shape)
+    if picked is None or len(turn) > 1:
         raise ValueError(
             "cover_ratio must be the card's shape as width:height: 16:9, 9:16, 3:2, 2:3, 5:4, 4:5, "
-            f"square or original, got {value!r}."
+            f"square or original (or the apps' label with a turn, like '16:9 vertical'); got {value!r}."
         )
-    return picked
+    ratio, position = picked
+    if turn:
+        position = turn[0] if ratio not in ("Original", "Square") else None
+    return ratio, position
 
 
 def _type_first(value: Any) -> Any:  # noqa: ANN401
@@ -166,14 +185,16 @@ def with_changes(
             kind = _pick(view, VIEWS, "view", "grid, list or scroll")
             if kind == "Classic":
                 state.size = None
-            elif state.kind == "Classic" and state.size is None:
+            elif state.kind == "Classic":
+                # A scroll view shows no card size (one the API stored stays hidden there),
+                # so a grid or list made from it starts with the apps' default, large.
                 state.size = "Extended"
             state.kind = kind
         if card_size is not None:
             if state.kind == "Classic":
                 raise ValueError(
                     "card_size is for the grid and list views; a scroll view has one card size. "
-                    "Pass view='grid' or view='list' with it."
+                    "Set the view to grid or list as well."
                 )
             state.size = _pick(card_size, CARD_SIZES, "card_size", "large or small")
         if open_view is not None:

@@ -143,8 +143,8 @@ included.
 Action buttons (at most 3 on a content): `update_content(content_id, workspace_id,
 action_buttons=[{"title": "Buy", "url": "https://..."}])`; a button opens a link
 (`url`), plays a Drive video (`asset_id`) or opens a form (`form_id`). The list
-REPLACES the current one (read `actionButtons` with get_content_v2 to add one);
-`[]` removes them all. `clear_main_asset=True` takes the main video or file off the
+REPLACES the current one: to add one, read `action_buttons` with get_content_v2 and
+send them all back with the new one; `[]` removes them all. `clear_main_asset=True` takes the main video or file off the
 content (it stays in Drive).
 
 Several agents/people editing the same content? `get_content_v2` returns a
@@ -307,25 +307,27 @@ channel or category to change any of these.
   `set_channel_icon(channel_id, workspace_id, symbol="star.fill", color="blue")`, or
   `emoji="🚀"`, or `photo_asset_id=<an image in the hub's Drive>` (one of the three).
   Colours: red, orange, yellow, green, mint, cyan, blue, indigo, purple, pink, brown,
-  gray, or #RRGGBB; left out, the current colour stays. `symbol="#"` is a coloured "#".
+  gray, or #RRGGBB; left out, the current colour stays. Symbols: the 48 the apps offer
+  (listed in the tool), `symbol="#"` is a coloured "#"; for anything else use an emoji.
   `remove_channel_icon(channel_id, workspace_id)` brings back the plain "#".
 - Link: `set_channel_slug(channel_id, "video-lessons", workspace_id)` →
   srgplus.com/<user_name>/channels/video-lessons. Lower-case latin letters, digits and
   dashes. Until set here the link follows the name (a rename changes it); old links keep
   working.
 - Order: `reorder_channels(hub_profile_id, [channel ids], workspace_id)` (hub owner or
-  admin) and `reorder_categories(channel_id, [category ids], workspace_id)`. The listed
-  ones come first in that order, the others keep their order after them. Archived ones
-  have no place in the order. The pinned category always shows first in the apps.
+  admin) and `reorder_categories(channel_id, [category ids], workspace_id)`; exact names
+  work too. The listed ones come first in that order, the others keep their order after
+  them. Archived ones have no place in the order. The pinned category always shows first
+  in the apps.
 - A category's settings: `update_category_settings(channel_id, category_id,
-  workspace_id, ...)` with only what changes:
+  workspace_id, ...)` (the category's id or exact name) with only what changes:
   - `pinned=True` pins it to the top of the channel (one per channel: the other one is
-    unpinned), `pinned=False` unpins it.
+    unpinned; an archived category must be restored first), `pinned=False` unpins it.
   - `view="grid"`, `"list"` or `"scroll"` (one horizontal row of cards);
     `card_size="large"` or `"small"` (grid and list); `open_view="grid"` or `"list"`
     (how it shows when opened, See all).
   - `cover_ratio`: the card shape as width:height, "16:9", "9:16", "3:2", "2:3", "5:4",
-    "4:5", "square" or "original".
+    "4:5", "square" or "original" ("16:9 vertical", as the apps label it, is 9:16).
   - `expandable` (can be opened), `progression` (show done / not done),
     `sequential` (members finish the contents in order), `notifications` (push to
     channel members on new content), `email` (also by email).
