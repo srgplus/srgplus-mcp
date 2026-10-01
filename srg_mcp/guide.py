@@ -327,6 +327,53 @@ SRG+ app.
 6. With several editors, pass `expected_version` (the `version` you read) to
    every write: a stale write then fails with 409 and changes nothing.
 
+## Hub profile widgets (the sections of the brand page)
+The page shows its widgets in order: Text, LinkList (the links), ContentWidget
+(cards of contents, or of Drive assets), HubProfile (other profiles), Media (a
+playable video) and Contact. `get_hub_profile` only lists them (id, type,
+title).
+1. Read: `get_hub_profile_widgets(hub_profile_id, workspace_id)` → `version`
+   and every widget in display order with `position` (0 = top) and all its
+   fields. A ContentWidget shows `referenceIds` (what a write takes) and
+   `references` `[{$type, id, name}]` (read-only; `$type` is `Content` or the
+   asset kind). Names are as of the last write of that widget.
+2. Content cards: `set_hub_profile_content_widget(hub_profile_id, workspace_id,
+   content_ids=[...])` → the widget then shows exactly those contents in that
+   order (REPLACES its list, like `set_featured_contents`). It fills the
+   page's only content widget, or creates one; with several, pass `widget_id`
+   (or `title`: the widget with that exact title, created if missing). Ids
+   that don't exist are skipped and listed in `skipped`. The contents
+   themselves are never changed.
+3. Any widget, ONE at a time; the others stay exactly as stored:
+   - add: `add_hub_profile_widget(hub_profile_id, workspace_id,
+     widget={...}, position=0)` (omit position to add at the end; max 20);
+   - change: `update_hub_profile_widget(hub_profile_id, widget_id,
+     widget={"title": "Reports"}, workspace_id)` → only the fields you pass
+     change; a list you pass (links, referenceIds, ...) replaces that list. The
+     type cannot change: remove and add instead;
+   - remove: `remove_hub_profile_widget(hub_profile_id, widget_id,
+     workspace_id)` → only the widget goes, never the contents it shows;
+   - order: `reorder_hub_profile_widgets(hub_profile_id, widget_ids=[...],
+     workspace_id)` → listed first, the rest after in their order.
+4. Shapes (camelCase, `$type` first, same as in a content's `context`):
+   - `{"$type":"Text","title":null,"content":"<markdown>"}` (up to 5,000 characters)
+   - `{"$type":"LinkList","title":null,"links":[{"title":"..","url":"https://.."}]}`
+   - `{"$type":"ContentWidget","title":"Playbooks","referenceType":"Content",
+     "referenceIds":[{"$type":"Content","id":"<content id>"}]}` (`"Asset"` and
+     Drive asset ids for files)
+   - `{"$type":"HubProfile","title":null,"hubProfileIds":["<hub profile id>"]}`
+   - `{"$type":"Media","title":null,"assetId":"<playable video id>","autoplay":false}`
+   - `{"$type":"Contact","title":null,"contacts":[{"$type":"Email","details":"hi@brand.com"}]}`
+   A widget read with `get_hub_profile_widgets` can be sent back as is.
+5. Whole page at once: `update_hub_profile(..., widgets=[...])` REPLACES ALL
+   widgets (the link list included): keep each `id`, leave `id` out for a new
+   one, and a widget you leave out is removed. Every widget is resolved again,
+   so one deleted content anywhere fails the write. Prefer the one-widget
+   tools. `create_hub_profile(widgets=...)` takes Text, LinkList and Contact
+   only.
+6. Every widget write takes `expected_version` (the `version` you read) →
+   409, nothing written, if the profile changed since.
+
 ## Archive / restore (reversible)
 Hubs and content are archive-only in core (no hard delete; deletion stays
 manual in-app). Drive files, channels and categories can also be deleted for
@@ -391,8 +438,9 @@ def get_srgplus_guide() -> str:
     Assets / Featured Content with named sections (versions), asset upload,
     covers (from a Drive image or one of the 12 ready-made preset gradients),
     creating a new hub with its channels and categories, setting up a hub
-    profile (bio, links, avatar and cover sizes / safe area), archive/restore,
-    and common pitfalls.
+    profile (bio, links, avatar and cover sizes / safe area), the hub profile
+    widgets (content cards and the other sections of a brand page),
+    archive/restore, and common pitfalls.
 
     Call this once before authoring or editing content if you are unsure of the
     workflow or a widget's shape — it is the authoritative reference and ships

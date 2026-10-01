@@ -51,6 +51,12 @@ Pitfalls that cause real damage — read before writing:
   `links` (like `context`) REPLACES the whole link list, so read get_hub_profile first and send
   the full list back. Avatar/cover from the hub's own Drive: set_hub_avatar / set_hub_cover
   (another hub's asset is refused). Sizes and the cover safe area: get_srgplus_guide().
+- Hub profile widgets (the sections of a brand page: text, links, content cards, profiles,
+  video, contacts): read them in full with get_hub_profile_widgets, then change ONE with
+  add_hub_profile_widget / update_hub_profile_widget / set_hub_profile_content_widget (the
+  page's content cards, in order) / remove_hub_profile_widget / reorder_hub_profile_widgets;
+  the other widgets stay as stored. update_hub_profile(widgets=...) REPLACES them all.
+  Removing a widget never deletes the contents it shows.
 - Text `content` is GitHub Flavored Markdown plus ==highlight== (full rules: get_srgplus_guide).
   Leave a blank line before and after tables, lists and `---` rules, write a pipe inside a table
   cell as \\|, and when editing a Text widget send the parts you did not change back byte for byte

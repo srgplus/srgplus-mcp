@@ -13,7 +13,9 @@ CORE selection: find things (workspaces → hub profiles → channels →
 content), search, read both content variants (v2 covers private-channel
 memberships), create/update content, upload an asset, attach to categories,
 remove a content from chosen categories only, fill a content's Featured Assets / Featured Content (named sections), read and
-edit a hub profile (bio, links, avatar, cover) with PATCH semantics, create a
+edit a hub profile (bio, links, avatar, cover) with PATCH semantics and its
+widgets one at a time (add / change / fill a content widget / remove /
+reorder, the others stay as stored), create a
 new hub with its channels and categories, rename a channel or category
 (PATCH: only the name changes), the brand context (index + memory
 page), reversible archive/restore, Drive file clean-up (archive → restore
@@ -66,6 +68,14 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "update_hub_profile",
     "set_hub_avatar",
     "set_hub_cover",
+    # Hub profile widgets: full read, then ONE widget at a time (the others
+    # stay as stored), version-checked like the profile edits above.
+    "get_hub_profile_widgets",
+    "add_hub_profile_widget",
+    "update_hub_profile_widget",
+    "set_hub_profile_content_widget",
+    "remove_hub_profile_widget",
+    "reorder_hub_profile_widgets",
     # Structure: a new hub, then its channels, then their categories (SRGDEV-850).
     # CREATE ONLY. update_channel / update_category stay on the full /mcp until
     # they keep the fields a caller leaves out: the backend PUT replaces the

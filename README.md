@@ -184,7 +184,9 @@ hosted HTTP (`X-API-Key` header).
 ## Available tools
 
 ### Hub Profiles
-`list_hub_profiles` · `list_managed_hub_profiles` · `get_hub_profile` · `get_hub_profile_by_username` · `filter_hub_profiles` · `create_hub_profile` · `update_hub_profile` · `set_hub_avatar` · `set_hub_cover` · `archive_hub_profile` · `restore_hub_profile` · `join_hub_profile` · `invite_to_hub_profile` · `list_invitations` · `update_invitation` · `delete_invitation` · `get_invitation_link` · `move_hub_profile_to_workspace` · `turn_on_hub_profile_community`
+`list_hub_profiles` · `list_managed_hub_profiles` · `get_hub_profile` · `get_hub_profile_by_username` · `filter_hub_profiles` · `create_hub_profile` · `update_hub_profile` · `set_hub_avatar` · `set_hub_cover` · `get_hub_profile_widgets` · `add_hub_profile_widget` · `update_hub_profile_widget` · `set_hub_profile_content_widget` · `remove_hub_profile_widget` · `reorder_hub_profile_widgets` · `archive_hub_profile` · `restore_hub_profile` · `join_hub_profile` · `invite_to_hub_profile` · `list_invitations` · `update_invitation` · `delete_invitation` · `get_invitation_link` · `move_hub_profile_to_workspace` · `turn_on_hub_profile_community`
+
+> The widget tools read a profile page's widgets in full and change ONE at a time (add, change, fill a content widget with contents in order, remove, reorder) through `/api/v1/hub-profiles/{id}/widgets`; the other widgets stay as stored and every write takes `expected_version` (409 when stale). `update_hub_profile(widgets=...)` replaces the whole list.
 
 ### Channels
 `list_channels` · `get_channel` · `get_channel_by_name` · `create_channel` · `update_channel` · `archive_channel` · `delete_channel` · `create_category` · `update_category` · `archive_category` · `delete_category` · `get_category_by_slugs` · `create_section` · `update_section` · `delete_section`
