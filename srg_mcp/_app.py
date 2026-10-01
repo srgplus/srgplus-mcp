@@ -69,6 +69,10 @@ Pitfalls that cause real damage — read before writing:
   non-zero cover width/height/size), never archive or re-upload a file for a late cover, and if
   it is still missing after ~15 minutes tell the user. set_cover/set_covers set a CONTENT's cover
   from a Drive image; they do not touch a video file's own preview.
+- No image for a card's cover? There are 12 ready-made gradient covers, no upload needed:
+  list_cover_presets (ids + previews), then set_cover_preset(content_id, preset_id, workspace_id)
+  or {"content_id", "preset_id"} items in set_covers. It replaces the current cover, so do not use
+  it over a cover the user chose unless asked.
 - Taking a content out of one category: remove_content_from_categories (other placements stay).
   Do not reset all placements with update_content(channels=...) and re-add them.
 - Renaming a category or channel: rename_category / rename_channel (only the name changes).

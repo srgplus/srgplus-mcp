@@ -18,7 +18,8 @@ new hub with its channels and categories, rename a channel or category
 (PATCH: only the name changes), the brand context (index + memory
 page), reversible archive/restore, Drive file clean-up (archive → restore
 or permanent delete, the same as the app's Drive bin), and the permanent
-delete of an archived channel or category (its contents stay, SRGDEV-921).
+delete of an archived channel or category (its contents stay, SRGDEV-921), and
+the ready-made preset covers (list + apply, SRGDEV-940).
 Excluded on purpose: user/permission management, hard deletes of hubs and
 contents, moves, the
 low-level collection subcontent tools, workspace actions, the full-replace
@@ -82,6 +83,9 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "complete_upload",
     "set_cover",
     "set_covers",
+    # Ready-made gradient covers, no upload (SRGDEV-940)
+    "list_cover_presets",
+    "set_cover_preset",
     "list_drive_files",
     "get_asset",
     # Drive clean-up, same flow as the app's bin: archive (reversible) →
