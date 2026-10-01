@@ -1,5 +1,6 @@
-"""Direct uploads from the agent's computer, covers from Drive, Drive listing
-and Drive clean-up (archive / restore / permanent delete).
+"""Direct uploads from the agent's computer, covers from Drive or from the
+ready-made preset gradients, Drive listing and Drive clean-up (archive /
+restore / permanent delete).
 
 The hosted server cannot read the user's files, and base64 through the model
 context does not scale (one 300 KB JPEG is ~400K characters). So the bytes
@@ -11,6 +12,10 @@ never pass through the server or the model:
    straight to storage and prints one JSON line;
 3. ``complete_upload`` finishes the uploads with that JSON → ready Drive assets;
 4. ``set_cover`` / ``set_covers`` use those assets as content covers.
+
+``list_cover_presets`` / ``set_cover_preset`` (and ``preset_id`` items in
+``set_covers``) give a content one of the 12 ready-made gradient covers, no
+upload needed (SRGDEV-940).
 
 Everything goes through the SDK's authenticated client (``_raw``), so these
 tools do not depend on an unreleased SDK version.
@@ -43,6 +48,14 @@ _API_WORKERS = 4
 # A just-completed upload is marked ready in Content-Hub asynchronously; the
 # cover-from-asset endpoint answers 400 "still uploading" until then.
 _STILL_UPLOADING_RETRY_DELAYS = (1, 1, 2, 2, 3, 3, 4, 4, 5)
+
+# The ready-made gradient covers (backend: GET /api/v1/contents/cover-presets),
+# in display order. Checked here so a typo gets one clear error that lists the
+# valid ids instead of a bare 400. When the backend gains a preset, add its id.
+COVER_PRESET_IDS: tuple[str, ...] = (
+    "pearl", "champagne", "desert", "orange", "burgundy", "purple",
+    "lavender", "sierra", "midnight", "mint", "alpine", "graphite",
+)  # fmt: skip
 
 _MIN_PART_SIZE = 5 * 1024 * 1024
 _MAX_PARTS = 10_000
@@ -451,6 +464,41 @@ def set_cover_from_asset(
             time.sleep(delay)
 
 
+def _check_preset_id(preset_id: str | None) -> str:
+    """The normalised preset id, or a ValueError naming the valid ids."""
+    value = (preset_id or "").strip().lower()
+    if value not in COVER_PRESET_IDS:
+        raise ValueError(
+            f"Unknown cover preset {preset_id!r}. Valid preset_id values: "
+            f"{', '.join(COVER_PRESET_IDS)} (list_cover_presets shows them with previews)."
+        )
+    return value
+
+
+def set_cover_from_preset(
+    workspace_id: str,
+    hub_profile_id: str,
+    content_id: str,
+    preset_id: str,
+    expected_version: int | None = None,
+) -> None:
+    """POST .../cover/from-preset (same auth, errors and If-Match as from-asset).
+
+    No upload is involved, so there is no "still uploading" wait here.
+    """
+    headers = (
+        None if expected_version is None else {"If-Match": f'"{int(expected_version)}"'}
+    )
+    _raw.call(
+        workspace_id,
+        "POST",
+        f"/api/v1/contents/{content_id}/cover/from-preset",
+        json={"presetId": _check_preset_id(preset_id)},
+        params={"hubProfileId": hub_profile_id},
+        headers=headers,
+    )
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         title="Set cover from a Drive image",
@@ -478,7 +526,8 @@ def set_cover(
     expected_version: optional `version` from get_content_v2 — the cover is
         set only if the content did not change since; else 409.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
-    For many covers at once use set_covers.
+    For many covers at once use set_covers. No image to hand? A ready-made
+    gradient cover needs no upload: set_cover_preset.
     """
     hub = hub_profile_id or _hub_of(content_id, workspace_id)
     set_cover_from_asset(workspace_id, hub, content_id, asset_id, expected_version)
@@ -487,7 +536,76 @@ def set_cover(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title="Set many covers from Drive images",
+        title="List preset covers",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+def list_cover_presets(workspace_id: str) -> dict:
+    """List the ready-made gradient covers a content card can use (no upload).
+
+    There are 12, in display order: pearl, champagne, desert, orange,
+    burgundy, purple, lavender, sierra, midnight, mint, alpine, graphite.
+    Apply one with set_cover_preset (or a preset_id item in set_covers).
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Returns {"presets": [{"id", "name", "previewUrl" (~400 px, to look at),
+    "url" (1600 px original)}], "count": n}. The URLs are public.
+    """
+    data = _raw.call(workspace_id, "GET", "/api/v1/contents/cover-presets")
+    rows = [
+        {key: row.get(key) for key in ("id", "name", "previewUrl", "url")}
+        for row in (data if isinstance(data, list) else [])
+        if isinstance(row, dict)
+    ]
+    return {
+        "presets": rows,
+        "count": len(rows),
+        "next": "set_cover_preset(content_id, preset_id, workspace_id)",
+    }
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Set cover from a preset",
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+)
+def set_cover_preset(
+    content_id: str,
+    preset_id: str,
+    workspace_id: str,
+    hub_profile_id: str | None = None,
+    expected_version: int | None = None,
+) -> dict:
+    """Give a content one of the ready-made gradient covers (no image needed).
+
+    Use it when the content has no suitable image yet and a clean, consistent
+    card is enough. It REPLACES the content's current cover, so do not use it
+    over a real cover the user chose unless they asked. To use their own
+    picture, upload it and call set_cover instead.
+    preset_id: one of pearl, champagne, desert, orange, burgundy, purple,
+        lavender, sierra, midnight, mint, alpine, graphite (list_cover_presets
+        shows them with previews). Anything else is refused with this list.
+    hub_profile_id: owning hub; resolved from the content when omitted.
+    expected_version: optional `version` from get_content_v2 — the cover is
+        set only if the content did not change since; else 409.
+    workspace_id: target workspace ID — get available IDs from list_workspaces()
+    Sets a CONTENT's cover (not a video file's own preview). For many covers at
+    once use set_covers with {"content_id", "preset_id"} items.
+    """
+    preset = _check_preset_id(preset_id)
+    hub = hub_profile_id or _hub_of(content_id, workspace_id)
+    set_cover_from_preset(workspace_id, hub, content_id, preset, expected_version)
+    return {"content_id": content_id, "preset_id": preset, "status": "cover_set"}
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Set many covers (Drive images or presets)",
         readOnlyHint=False,
         destructiveHint=False,
         openWorldHint=True,
@@ -498,40 +616,55 @@ def set_covers(
     workspace_id: str,
     hub_profile_id: str | None = None,
 ) -> dict:
-    """Set covers on many contents in one call, each from a Drive image.
+    """Set covers on many contents in one call, each from a Drive image or a preset.
 
-    items: [{"content_id": "...", "asset_id": "..."}, ...] (up to 100); an
-        item may add "expected_version" (from get_content_v2) → 409 if stale.
+    items: [{"content_id": "...", "asset_id": "..."}, ...] (up to 100). Per
+        item give exactly one source: "asset_id" (a Drive image) or
+        "preset_id" (a ready-made gradient: pearl, champagne, desert, orange,
+        burgundy, purple, lavender, sierra, midnight, mint, alpine, graphite;
+        see list_cover_presets). Both kinds can be mixed in one call. An item
+        may add "expected_version" (from get_content_v2) → 409 if stale.
     hub_profile_id: pass it when all contents are in one hub (saves a lookup
         per item); otherwise each content's hub is resolved automatically.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     Sets each CONTENT's cover, not a video file's own preview (the server
     makes that itself).
     A failure on one item does not stop the others. Returns
-    {"results": [{content_id, asset_id, status | error}], "set": n, "failed": n}.
+    {"results": [{content_id, asset_id | preset_id, status | error}], "set": n, "failed": n}.
     """
     if not items:
-        raise ValueError("Pass at least one {content_id, asset_id} item.")
+        raise ValueError("Pass at least one {content_id, asset_id | preset_id} item.")
     if len(items) > 100:
         raise ValueError("At most 100 covers per call; split the list.")
 
     def one(item: dict) -> dict:
-        content_id, asset_id = item.get("content_id"), item.get("asset_id")
-        if not content_id or not asset_id:
-            return {**item, "status": "failed", "error": "needs content_id and asset_id"}
-        try:
-            hub = hub_profile_id or _hub_of(content_id, workspace_id)
-            set_cover_from_asset(
-                workspace_id, hub, content_id, asset_id, item.get("expected_version")
-            )
-        except srg.exceptions.SRGError as exc:
+        content_id = item.get("content_id")
+        asset_id, preset_id = item.get("asset_id"), item.get("preset_id")
+        if not content_id or bool(asset_id) == bool(preset_id):
             return {
-                "content_id": content_id,
-                "asset_id": asset_id,
+                **item,
                 "status": "failed",
-                "error": exc.message,
+                "error": "needs content_id and exactly one of asset_id or preset_id",
             }
-        return {"content_id": content_id, "asset_id": asset_id, "status": "cover_set"}
+        source = {"asset_id": asset_id} if asset_id else {"preset_id": preset_id}
+        try:
+            if preset_id:
+                preset_id = _check_preset_id(preset_id)
+                source = {"preset_id": preset_id}
+            hub = hub_profile_id or _hub_of(content_id, workspace_id)
+            if asset_id:
+                set_cover_from_asset(
+                    workspace_id, hub, content_id, asset_id, item.get("expected_version")
+                )
+            else:
+                set_cover_from_preset(
+                    workspace_id, hub, content_id, preset_id, item.get("expected_version")
+                )
+        except srg.exceptions.SRGError as exc:
+            return {"content_id": content_id, **source, "status": "failed", "error": exc.message}
+        except ValueError as exc:
+            return {"content_id": content_id, **source, "status": "failed", "error": str(exc)}
+        return {"content_id": content_id, **source, "status": "cover_set"}
 
     results = _parallel(one, items)
     failed = sum(1 for r in results if r["status"] == "failed")

@@ -136,3 +136,34 @@ def test_instructions_and_docstrings_say_a_late_video_cover_is_normal():
     for tool in ("set_cover", "set_covers"):
         doc = " ".join(mcp._tool_manager.get_tool(tool).description.split())
         assert "CONTENT" in doc and "video file's own preview" in doc, tool
+
+
+def test_guide_and_instructions_explain_preset_covers():
+    from srg_mcp.uploads import COVER_PRESET_IDS
+
+    text = " ".join(SRGPLUS_GUIDE.split())
+    for marker in (
+        "list_cover_presets",
+        "set_cover_preset",
+        '`set_covers(items=[{"content_id", "preset_id"}',
+        "REPLACES the current cover",
+        "never put one over a cover the user chose or uploaded",
+    ):
+        assert marker in text, marker
+    # Every preset id is spelled out so an agent never has to guess one.
+    for preset_id in COVER_PRESET_IDS:
+        assert f"`{preset_id}`" in text, preset_id
+    for marker in ("list_cover_presets", "set_cover_preset", "do not use it over a cover"):
+        assert " ".join(mcp.instructions.split()).count(marker) >= 1, marker
+
+
+def test_preset_cover_tools_are_documented_for_agents():
+    from srg_mcp.uploads import COVER_PRESET_IDS
+
+    for tool in ("set_cover_preset", "set_covers", "list_cover_presets"):
+        doc = " ".join(mcp._tool_manager.get_tool(tool).description.split())
+        for preset_id in COVER_PRESET_IDS:
+            assert preset_id in doc, (tool, preset_id)
+    assert "REPLACES" in mcp._tool_manager.get_tool("set_cover_preset").description
+    assert "set_cover_preset" in mcp._tool_manager.get_tool("set_cover").description
+    assert {"list_cover_presets", "set_cover_preset"} <= set(CORE_TOOL_NAMES)

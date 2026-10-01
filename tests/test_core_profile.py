@@ -40,6 +40,8 @@ EXPECTED_CORE = {
     "complete_upload",
     "set_cover",
     "set_covers",
+    "list_cover_presets",
+    "set_cover_preset",
     "list_drive_files",
     "get_asset",
     "archive_drive_files",

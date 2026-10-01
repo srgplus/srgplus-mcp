@@ -31,7 +31,9 @@ class _Api:
         self.routes: dict = {}
 
     def __call__(self, workspace_id, method, path, *, json=None, params=None, headers=None):
-        self.calls.append({"method": method, "path": path, "json": json, "params": params})
+        self.calls.append(
+            {"method": method, "path": path, "json": json, "params": params, "headers": headers}
+        )
         answer = self.routes.get((method, path))
         if callable(answer):
             return answer(json)
@@ -398,6 +400,210 @@ def test_set_covers_skips_lookups_when_hub_is_given(api: _Api, monkeypatch) -> N
     out = uploads.set_covers([{"content_id": "c1", "asset_id": "i1"}], WS, hub_profile_id=HUB)
 
     assert out["set"] == 1
+
+
+# --------------------------------------------------------------------------
+# Preset covers (SRGDEV-940): list_cover_presets / set_cover_preset / set_covers
+# --------------------------------------------------------------------------
+
+PRESET_ROUTE = ("POST", "/api/v1/contents/c1/cover/from-preset")
+
+
+def test_preset_ids_match_the_backend_contract() -> None:
+    assert uploads.COVER_PRESET_IDS == (
+        "pearl", "champagne", "desert", "orange", "burgundy", "purple",
+        "lavender", "sierra", "midnight", "mint", "alpine", "graphite",
+    )  # fmt: skip
+
+
+def test_list_cover_presets_returns_compact_rows(api: _Api) -> None:
+    api.routes[("GET", "/api/v1/contents/cover-presets")] = [
+        {"id": "pearl", "name": "Pearl", "previewUrl": "https://cdn/p-400.jpg",
+         "url": "https://cdn/p-1600.jpg", "sortOrder": 1},
+        {"id": "champagne", "name": "Champagne", "previewUrl": "https://cdn/c-400.jpg",
+         "url": "https://cdn/c-1600.jpg"},
+    ]
+
+    out = uploads.list_cover_presets(WS)
+
+    assert api.calls == [
+        {"method": "GET", "path": "/api/v1/contents/cover-presets", "json": None,
+         "params": None, "headers": None}
+    ]
+    assert out["count"] == 2 and "set_cover_preset" in out["next"]
+    assert out["presets"] == [
+        {"id": "pearl", "name": "Pearl", "previewUrl": "https://cdn/p-400.jpg",
+         "url": "https://cdn/p-1600.jpg"},
+        {"id": "champagne", "name": "Champagne", "previewUrl": "https://cdn/c-400.jpg",
+         "url": "https://cdn/c-1600.jpg"},
+    ]
+
+
+def test_list_cover_presets_survives_an_empty_answer(api: _Api) -> None:
+    api.routes[("GET", "/api/v1/contents/cover-presets")] = None
+    assert uploads.list_cover_presets(WS)["presets"] == []
+
+
+def test_list_cover_presets_backend_errors_surface(api: _Api) -> None:
+    api.routes[("GET", "/api/v1/contents/cover-presets")] = _http_error(
+        srg.exceptions.NotFoundError, 404, "Not found"
+    )
+    with pytest.raises(srg.exceptions.NotFoundError):
+        uploads.list_cover_presets(WS)
+
+
+def test_set_cover_preset_posts_the_preset_id_with_the_hub(api: _Api) -> None:
+    api.routes[PRESET_ROUTE] = None
+
+    out = uploads.set_cover_preset("c1", "pearl", WS, hub_profile_id=HUB)
+
+    assert out == {"content_id": "c1", "preset_id": "pearl", "status": "cover_set"}
+    assert len(api.calls) == 1
+    assert api.calls[0]["json"] == {"presetId": "pearl"}
+    assert api.calls[0]["params"] == {"hubProfileId": HUB}
+    assert api.calls[0]["headers"] is None
+
+
+@pytest.mark.parametrize("preset_id", uploads.COVER_PRESET_IDS)
+def test_set_cover_preset_accepts_every_known_preset(api: _Api, preset_id: str) -> None:
+    api.routes[PRESET_ROUTE] = None
+    assert uploads.set_cover_preset("c1", preset_id, WS, hub_profile_id=HUB)["status"] == "cover_set"
+    assert api.calls[0]["json"] == {"presetId": preset_id}
+
+
+def test_set_cover_preset_ignores_case_and_spaces(api: _Api) -> None:
+    api.routes[PRESET_ROUTE] = None
+    out = uploads.set_cover_preset("c1", " Pearl ", WS, hub_profile_id=HUB)
+    assert out["preset_id"] == "pearl"
+    assert api.calls[0]["json"] == {"presetId": "pearl"}
+
+
+@pytest.mark.parametrize("bad", ["pearls", "", "  ", "#fff", "123"])
+def test_set_cover_preset_refuses_unknown_ids_before_any_call(
+    api: _Api, monkeypatch, bad: str
+) -> None:
+    monkeypatch.setattr(uploads, "_hub_of", lambda cid, ws: pytest.fail("no lookup expected"))
+    with pytest.raises(ValueError, match="Unknown cover preset") as caught:
+        uploads.set_cover_preset("c1", bad, WS)
+    # The error lists every valid id so the agent can fix the call.
+    for preset_id in uploads.COVER_PRESET_IDS:
+        assert preset_id in str(caught.value)
+    assert api.calls == []
+
+
+def test_set_cover_preset_resolves_the_hub_when_omitted(api: _Api, monkeypatch) -> None:
+    api.routes[PRESET_ROUTE] = None
+    lookups: list[str] = []
+    monkeypatch.setattr(uploads, "_hub_of", lambda cid, ws: lookups.append(cid) or HUB)
+
+    uploads.set_cover_preset("c1", "alpine", WS)
+
+    assert lookups == ["c1"]
+    assert api.calls[0]["params"] == {"hubProfileId": HUB}
+
+
+def test_set_cover_preset_sends_if_match_when_expected_version_given(api: _Api) -> None:
+    api.routes[PRESET_ROUTE] = None
+
+    uploads.set_cover_preset("c1", "mint", WS, hub_profile_id=HUB, expected_version=7)
+    uploads.set_cover_preset("c1", "mint", WS, hub_profile_id=HUB)
+
+    assert [c["headers"] for c in api.calls] == [{"If-Match": '"7"'}, None]
+
+
+@pytest.mark.parametrize(
+    ("cls", "status", "detail"),
+    [
+        (srg.exceptions.BadRequestError, 400, "Unknown cover preset."),
+        (srg.exceptions.NotFoundError, 404, "Content not found"),
+        (srg.exceptions.ConflictError, 409, "The content changed since version 7."),
+    ],
+)
+def test_set_cover_preset_surfaces_backend_errors_without_retry(
+    api: _Api, cls, status: int, detail: str
+) -> None:
+    api.routes[PRESET_ROUTE] = _http_error(cls, status, detail)
+    with pytest.raises(cls):
+        uploads.set_cover_preset("c1", "pearl", WS, hub_profile_id=HUB)
+    assert len(api.calls) == 1  # no "still uploading" wait: nothing is uploaded
+
+
+def test_set_covers_mixes_assets_and_presets(api: _Api, monkeypatch) -> None:
+    api.routes[("POST", "/api/v1/contents/c1/cover/from-asset")] = None
+    api.routes[("POST", "/api/v1/contents/c2/cover/from-preset")] = None
+    api.routes[("POST", "/api/v1/contents/c3/cover/from-preset")] = _http_error(
+        srg.exceptions.NotFoundError, 404, "Content not found"
+    )
+    monkeypatch.setattr(uploads, "_hub_of", lambda cid, ws: pytest.fail("no lookup expected"))
+
+    out = uploads.set_covers(
+        [
+            {"content_id": "c1", "asset_id": "i1"},
+            {"content_id": "c2", "preset_id": "Midnight", "expected_version": 4},
+            {"content_id": "c3", "preset_id": "sierra"},
+            {"content_id": "c4", "preset_id": "nope"},  # unknown preset: this item fails
+            {"content_id": "c5", "asset_id": "i5", "preset_id": "pearl"},  # two sources
+            {"content_id": "c6"},  # no source
+        ],
+        WS,
+        hub_profile_id=HUB,
+    )
+
+    assert [r["status"] for r in out["results"]] == [
+        "cover_set", "cover_set", "failed", "failed", "failed", "failed",
+    ]
+    assert out["set"] == 2 and out["failed"] == 4
+    assert out["results"][0] == {"content_id": "c1", "asset_id": "i1", "status": "cover_set"}
+    assert out["results"][1] == {"content_id": "c2", "preset_id": "midnight", "status": "cover_set"}
+    assert out["results"][2]["error"] and out["results"][2]["preset_id"] == "sierra"
+    assert "Valid preset_id values" in out["results"][3]["error"]
+    assert "exactly one" in out["results"][4]["error"]
+    assert "exactly one" in out["results"][5]["error"]
+    sent = {c["path"]: c for c in api.calls}
+    assert sent["/api/v1/contents/c2/cover/from-preset"]["json"] == {"presetId": "midnight"}
+    assert sent["/api/v1/contents/c2/cover/from-preset"]["headers"] == {"If-Match": '"4"'}
+    assert sent["/api/v1/contents/c1/cover/from-asset"]["json"] == {"coverAssetId": "i1"}
+    assert not any(c["path"] in ("/api/v1/contents/c4/cover/from-preset",
+                                 "/api/v1/contents/c5/cover/from-preset") for c in api.calls)
+
+
+def test_set_covers_resolves_each_hub_for_preset_items(api: _Api, monkeypatch) -> None:
+    api.routes[("POST", "/api/v1/contents/c1/cover/from-preset")] = None
+    api.routes[("POST", "/api/v1/contents/c2/cover/from-preset")] = None
+    monkeypatch.setattr(uploads, "_hub_of", lambda cid, ws: f"hub-of-{cid}")
+
+    out = uploads.set_covers(
+        [{"content_id": "c1", "preset_id": "pearl"}, {"content_id": "c2", "preset_id": "mint"}], WS
+    )
+
+    assert out["set"] == 2
+    assert {c["path"]: c["params"] for c in api.calls} == {
+        "/api/v1/contents/c1/cover/from-preset": {"hubProfileId": "hub-of-c1"},
+        "/api/v1/contents/c2/cover/from-preset": {"hubProfileId": "hub-of-c2"},
+    }
+
+
+def test_set_covers_preset_items_see_the_request_api_key(monkeypatch) -> None:
+    """Preset items run on the same worker threads as asset items, so they must
+    also see the key the hosted server bound to the request."""
+    import srg_mcp._client as client_mod
+
+    seen: list = []
+
+    def fake_call(workspace_id, method, path, *, json=None, params=None, headers=None):
+        seen.append(client_mod._current_key_var.get())
+
+    monkeypatch.setattr(uploads._raw, "call", fake_call)
+    token = client_mod.set_current_api_key("srgplus_request_key")
+    try:
+        out = uploads.set_covers(
+            [{"content_id": f"c{i}", "preset_id": "pearl"} for i in range(6)], WS, hub_profile_id=HUB
+        )
+    finally:
+        client_mod.reset_current_api_key(token)
+
+    assert out["set"] == 6
+    assert seen and set(seen) == {"srgplus_request_key"}
 
 
 # --------------------------------------------------------------------------

@@ -230,6 +230,21 @@ of many uploads at once can delay it. A video with no cover yet is normal.
   The bytes are copied into the cover, so it survives deleting the Drive file.
 - From a URL: `update_content(content_id, workspace_id, cover_image="https://...")`
   (no extension needed). Or `update_content(cover_asset_id=...)`.
+- Ready-made preset covers (no image, no upload): there are 12 gradient covers.
+  `list_cover_presets(workspace_id)` → `{"presets": [{id, name, previewUrl,
+  url}]}` (`previewUrl` ~400 px to look at, `url` 1600 px). The ids, in
+  display order: `pearl`, `champagne`, `desert`, `orange`, `burgundy`,
+  `purple`, `lavender`, `sierra`, `midnight`, `mint`, `alpine`, `graphite`.
+  Apply one: `set_cover_preset(content_id, preset_id, workspace_id)`; many at
+  once: `set_covers(items=[{"content_id", "preset_id"}, ...], workspace_id)`
+  (items may mix `asset_id` and `preset_id`, exactly one per item). Same
+  `expected_version` / 409 rule as `set_cover`; an unknown id is refused with
+  the valid list.
+  When to use: the content has no suitable image and a clean, consistent card
+  will do (new or placeholder cards, a batch that should look uniform, quick
+  drafts). A preset REPLACES the current cover, so never put one over a cover
+  the user chose or uploaded unless they ask; when the user wants their own
+  picture, upload it and use `set_cover`.
 - Body edits never touch the cover (update_content only changes what you pass).
 
 ## Drive
@@ -374,6 +389,7 @@ def get_srgplus_guide() -> str:
     exact widget shapes for the `context` body, the Markdown standard for Text
     widgets (GFM + ==highlight==), safe-update rules, Featured
     Assets / Featured Content with named sections (versions), asset upload,
+    covers (from a Drive image or one of the 12 ready-made preset gradients),
     creating a new hub with its channels and categories, setting up a hub
     profile (bio, links, avatar and cover sizes / safe area), archive/restore,
     and common pitfalls.
