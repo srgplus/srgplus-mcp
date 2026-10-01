@@ -428,7 +428,7 @@ def test_add_content_widget_in_the_content_context_shape(hub):
         ({"$type": "ContentWidget", "referenceIds": [C[0], C[0]]}, "repeated"),
         ({"$type": "ContentWidget", "referenceType": "Contents", "referenceIds": []}, "referenceType"),
         ({"$type": "ContentWidget", "referenceIds": ["not-an-id"]}, "24 hex"),
-        ({"$type": "HubProfile", "hubProfileIds": []}, "hubProfileIds"),
+        ({"$type": "HubProfile"}, "hubProfileIds"),
         ({"$type": "Media"}, "assetId"),
         ({"$type": "Media", "assetId": A[1], "autoplay": "yes"}, "autoplay"),
         ({"$type": "Contact", "contacts": [{"$type": "Fax", "details": "1"}]}, "Email"),
@@ -474,6 +474,42 @@ def test_update_widget_takes_a_widget_as_read_back(hub):
         {"$type": "KnownLink", "title": "Site", "url": "https://brand.example"},
     ]
     assert hub.writes()[1]["json"]["hubProfileIds"] == [OTHER_HUB]
+
+
+def test_a_widget_whose_list_emptied_can_still_be_sent_back(hub):
+    # Archiving a listed profile pulls it out of the widget: hubProfiles becomes [].
+    hub.by_id(W_HUBS)["hubProfiles"] = []
+
+    hub_widgets.update_hub_profile_widget(HUB, W_HUBS, {"title": "Friends of the brand"}, WS)
+    read = hub_widgets.get_hub_profile_widgets(HUB, WS)["widgets"]
+    hub_profiles.update_hub_profile(HUB, WS, widgets=read)
+
+    assert hub.writes()[0]["json"] == {"$type": "HubProfile", "title": "Friends of the brand", "hubProfileIds": []}
+    assert [w.get("hubProfileIds") for w in hub.writes()[1]["json"]["widgets"] if w["$type"] == "HubProfile"] == [[]]
+
+
+def test_ids_are_matched_whatever_their_case(hub):
+    out = hub_widgets.set_hub_profile_content_widget(
+        HUB, WS, content_ids=[C[2].upper(), C[3]], widget_id=W_CARDS.upper()
+    )
+
+    assert hub.writes()[0]["json"]["referenceIds"] == [{"$type": "Content", "id": C[2]}, {"$type": "Content", "id": C[3]}]
+    assert out["widget_id"] == W_CARDS and out["in_requested_order"] is True
+    hub_widgets.update_hub_profile_widget(HUB, W_TEXT.upper(), {"content": "Hi"}, WS)
+    hub_widgets.remove_hub_profile_widget(HUB, W_VIDEO.upper(), WS)
+    hub_widgets.reorder_hub_profile_widgets(HUB, [W_CONTACT.upper()], WS)
+    assert hub.by_id(W_TEXT)["content"] == "Hi"
+    assert W_VIDEO not in hub.ids() and hub.ids()[0] == W_CONTACT
+
+
+def test_update_widget_does_not_move_it(hub):
+    read = hub_widgets.get_hub_profile_widgets(HUB, WS)["widgets"][0]
+
+    hub_widgets.update_hub_profile_widget(HUB, W_TEXT, {**read, "content": "Changed"}, WS)  # same position: fine
+    with pytest.raises(ValueError, match="reorder_hub_profile_widgets"):
+        hub_widgets.update_hub_profile_widget(HUB, W_TEXT, {"position": 3, "content": "Moved?"}, WS)
+
+    assert len(hub.writes()) == 1 and hub.ids()[0] == W_TEXT
 
 
 def test_update_widget_keeps_contacts_without_sending_icons(hub):

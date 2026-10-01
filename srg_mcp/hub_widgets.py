@@ -38,7 +38,6 @@ _ANY_OBJECT_ID = re.compile(r"[0-9a-fA-F]{24}")
 MAX_WIDGETS = 20
 _MAX_TITLE = 150
 _MAX_TEXT = 5000
-_MAX_REFERENCES = 200
 
 _TYPES = {t.lower(): t for t in ("Text", "LinkList", "ContentWidget", "HubProfile", "Media", "Contact")}
 # The create endpoint knows only these; the others need content that exists first.
@@ -151,7 +150,7 @@ def _object_id(value: Any, what: str) -> str:  # noqa: ANN401
     text = str(value if value is not None else "").strip()
     if not _OBJECT_ID.match(text):
         raise ValueError(f"{what} must be an SRG+ id (24 hex characters), not {value!r}.")
-    return text
+    return text.lower()  # stored ids are lowercase hex
 
 
 def _title_in(value: Any) -> str | None:  # noqa: ANN401
@@ -208,8 +207,6 @@ def _references_in(widget: dict) -> tuple[str, list[dict]]:
             f"a {reference_type.lower()}; these are not: {other}."
         )
     _unique([r["id"] for r in refs], "reference")
-    if len(refs) > _MAX_REFERENCES:
-        raise ValueError(f"A ContentWidget holds at most {_MAX_REFERENCES} items; got {len(refs)}.")
     return reference_type, refs
 
 
@@ -217,7 +214,7 @@ def _hub_profile_ids_in(widget: dict) -> list[str]:
     raw = widget.get("hubProfileIds")
     if isinstance(raw, str):
         raw = [raw]
-    if not isinstance(raw, list) or not raw:
+    if not isinstance(raw, list):
         raise ValueError(
             'A HubProfile widget needs "hubProfileIds": ["<hub profile id>", ...] (an array, even for one).'
         )
@@ -228,7 +225,7 @@ def _hub_profile_ids_in(widget: dict) -> list[str]:
 
 def _contacts_in(widget: dict) -> list[dict]:
     contacts = widget.get("contacts")
-    if not isinstance(contacts, list) or not contacts:
+    if not isinstance(contacts, list):
         raise ValueError('A Contact widget needs "contacts": [{"$type": "Email" | "Phone", "details": "..."}].')
     rows = []
     for contact in contacts:
@@ -454,14 +451,19 @@ def add_hub_profile_widget(
 
 @mcp.tool(
     description=f"""Change ONE widget of a hub profile page in place (same id,
-same position). Only the fields you pass change; the widget's other fields and
-every other widget stay as they are. A list you pass (links, referenceIds,
-hubProfileIds, contacts) REPLACES that list.
+same position). Every other widget stays as it is. In this widget the fields
+you pass change and the others keep their current value; a list you pass
+(links, referenceIds, hubProfileIds, contacts) REPLACES that list.
+
+The widget is written whole, so what it shows is looked up again: if a content
+or asset it points to was deleted, the write fails with a 404 naming it (send
+referenceIds without it), and link icons are fetched again.
 
 widget_id: from get_hub_profile_widgets.
 widget: the fields to change, e.g. {{"title": "Reports"}} or
     {{"referenceIds": [...]}}. A whole widget read with get_hub_profile_widgets
-    works too. The type cannot change: remove the widget and add a new one.
+    works too. The type cannot change (remove the widget and add a new one),
+    and neither can the position here: reorder_hub_profile_widgets moves it.
 expected_version: the `version` from get_hub_profile_widgets → 409 (nothing
     written) if someone changed the profile since. Without it the change is
     applied to the latest profile.
@@ -488,12 +490,18 @@ def update_hub_profile_widget(
 ) -> dict:
     if not isinstance(widget, dict) or not widget:
         raise ValueError('widget holds the fields to change, e.g. {"title": "Reports"}.')
-    if widget.get("id") and widget["id"] != widget_id:
+    widget_id = _object_id(widget_id, "widget_id")
+    if widget.get("id") and _object_id(widget["id"], "widget.id") != widget_id:
         raise ValueError(f"widget.id ({widget['id']}) is not widget_id ({widget_id}).")
     changes = _from_read_shape({k: v for k, v in widget.items() if k not in ("id", "position", "count")})
 
     def write(_profile: dict, widgets: list[dict], version: int | None) -> None:
         stored = _find(widgets, widget_id)
+        if widget.get("position") is not None and widget["position"] != stored["position"]:
+            raise ValueError(
+                f"Widget {widget_id} is at position {stored['position']}; "
+                "move it with reorder_hub_profile_widgets."
+            )
         kind = changes.get("$type", changes.get("type"))
         if kind is not None and _TYPES.get(str(kind).strip().lower()) != stored["$type"]:
             raise ValueError(
@@ -516,7 +524,7 @@ def _content_ids_in(content_ids: Any) -> tuple[list[str], list[dict]]:  # noqa: 
     wanted: list[str] = []
     skipped: list[dict] = []
     for raw in content_ids:
-        content_id = str(raw).strip()
+        content_id = str(raw).strip().lower()
         if not _OBJECT_ID.match(content_id):
             skipped.append({"id": raw, "reason": "not a valid SRG+ id (24 hex characters)"})
         elif content_id in wanted:
@@ -525,8 +533,6 @@ def _content_ids_in(content_ids: Any) -> tuple[list[str], list[dict]]:  # noqa: 
             wanted.append(content_id)
     if content_ids and not wanted:
         raise ValueError(f"None of content_ids is an SRG+ content id; nothing was changed. {skipped}")
-    if len(wanted) > _MAX_REFERENCES:
-        raise ValueError(f"A ContentWidget holds at most {_MAX_REFERENCES} contents; got {len(wanted)}.")
     return wanted, skipped
 
 
@@ -600,6 +606,8 @@ def set_hub_profile_content_widget(
     "skipped", "in_requested_order", "version", "widgets" (page order)}.
     """
     wanted, skipped = _content_ids_in(content_ids)
+    if widget_id is not None:
+        widget_id = _object_id(widget_id, "widget_id")
     if position is not None and int(position) < 0:
         raise ValueError("position is 0 (first) or more; omit it to add the widget at the end.")
     match_title = _title_in(title) if title is not None else None
@@ -691,6 +699,7 @@ def remove_hub_profile_widget(
     Returns {"hub_profile_id", "removed" ({$type, id, title, ...} as it was),
     "version", "widgets" (the page order after)}.
     """
+    widget_id = _object_id(widget_id, "widget_id")
     _profile, widgets = _read(hub_profile_id, workspace_id)
     removed = _find(widgets, widget_id)
     _raw.call(
