@@ -1,19 +1,25 @@
+from typing import Any
 from urllib.parse import quote
 
 from srg_mcp import _raw
 from srg_mcp._app import mcp
+from srg_mcp._category_options import settings_of, with_changes
 from srg_mcp._client import get_client
 from mcp.types import ToolAnnotations
 
+_LINK = "https://srgplus.com/{user}/channels/{slug}"
 
-def _hub_profile_id(channel_id: str, workspace_id: str) -> str:
+
+def _hub_profile_id(channel_id: str, workspace_id: str, channel: dict | None = None) -> str:
     """Id of the hub profile that owns ``channel_id``.
 
     The archive/restore endpoints need it (without it they answer a bare 400,
     SRGDEV-856), but GET /api/v2/channels/{id} only carries the hub's user
     name, so the hub is looked up by that name. Works for archived channels.
+    ``channel``: that GET's answer when the caller already has it.
     """
-    channel = _raw.call(workspace_id, "GET", f"/api/v2/channels/{channel_id}") or {}
+    if channel is None:
+        channel = _raw.call(workspace_id, "GET", f"/api/v2/channels/{channel_id}") or {}
     user_name = channel.get("hubProfileUserName")
     hub = (
         _raw.call(
@@ -33,6 +39,91 @@ def _hub_profile_id(channel_id: str, workspace_id: str) -> str:
     return hub_profile_id
 
 
+def _channel(channel_id: str, workspace_id: str) -> dict:
+    channel = _raw.call(workspace_id, "GET", f"/api/v2/channels/{channel_id}")
+    if not isinstance(channel, dict) or not channel.get("id"):
+        raise ValueError(f"Channel {channel_id} was not found; list_channels gives the ids.")
+    return channel
+
+
+def _category(channel: dict, category_id: str) -> dict:
+    wanted = str(category_id).strip().lower()
+    for category in channel.get("categories") or []:
+        if str(category.get("id", "")).lower() == wanted:
+            return category
+    names = ", ".join(f"{c.get('name')!r} ({c.get('id')})" for c in channel.get("categories") or [])
+    raise ValueError(
+        f"Category {category_id} is not in channel {channel.get('name')!r}. Its categories: {names or 'none'}."
+    )
+
+
+def channel_link(channel: dict) -> str | None:
+    user, slug = channel.get("hubProfileUserName"), channel.get("slug")
+    return _LINK.format(user=user, slug=slug) if user and slug else None
+
+
+def icon_out(icon: dict | None) -> dict | None:
+    """A channel icon as the tools take it (None: the plain "#")."""
+    if not icon:
+        return None
+    out: dict[str, Any] = {"kind": icon.get("kind"), "color": icon.get("color")}
+    for key, name in (("symbol", "symbol"), ("emoji", "emoji"), ("assetId", "photo_asset_id"), ("url", "url")):
+        if icon.get(key):
+            out[name] = icon[key]
+    return out
+
+
+def write_category(
+    channel_id: str,
+    category: dict,
+    workspace_id: str,
+    *,
+    name: str | None = None,
+    pinned: bool | None = None,
+    notifications: bool | None = None,
+    email: bool | None = None,
+    options: dict | None = None,
+) -> dict:
+    """PUT one category with every field as read, except the given ones. Returns what was sent.
+
+    The endpoint replaces the whole category (an omitted isPinned unpins it, options reset),
+    so every field goes back as read.
+    """
+    body: dict[str, Any] = {
+        "name": category.get("name") if name is None else name,
+        "isPinned": bool(category.get("isPinned")) if pinned is None else bool(pinned),
+    }
+    # A flag the read did not carry is left out rather than guessed: the backend then
+    # keeps the stored email flag (and uses its default for notifications).
+    for key, value in (("notificationsEnabled", notifications), ("emailEnabled", email)):
+        if value is not None:
+            body[key] = bool(value)
+        elif key in category:
+            body[key] = bool(category[key])
+    body["options"] = options if options is not None else with_changes(category.get("options"))
+    _raw.call(
+        workspace_id, "PUT", f"/api/v1/channels/{channel_id}/categories/{category['id']}", json=body
+    )
+    return body
+
+
+def settings_after(category: dict, sent: dict) -> dict:
+    """A category's id, name and settings as written by write_category."""
+    return {
+        "category_id": category["id"],
+        "name": sent["name"],
+        **settings_of(
+            {
+                **category,
+                "isPinned": sent["isPinned"],
+                "notificationsEnabled": sent.get("notificationsEnabled", category.get("notificationsEnabled")),
+                "emailEnabled": sent.get("emailEnabled", category.get("emailEnabled")),
+                "options": sent["options"],
+            }
+        ),
+    }
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         title="List channels",
@@ -46,17 +137,31 @@ def list_channels(
     workspace_id: str,
     include_archived: bool = False,
 ) -> list[dict]:
-    """List all channels for a hub profile.
+    """List all channels for a hub profile, in their order in the apps.
 
+    Each channel has its id, name, categories, privacy, is_archived, its link (slug and the
+    full srgplus.com link) and its icon (None: the plain "#").
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
+    from srg.schemas.channel import Channel
+
+    rows = _raw.call(
+        workspace_id,
+        "GET",
+        f"/api/v1/channels/{hub_profile_id}",
+        params={"includeArchived": str(include_archived).lower()},
+    ) or []
     return [
-        c.model_dump(mode="json")
-        for c in get_client().channels.list(
-            hub_profile_id,
-            include_archived=include_archived,
-            workspace_id=workspace_id,
-        )
+        {
+            **Channel.model_validate(row).model_dump(mode="json"),
+            "privacy": row.get("privacy"),
+            "is_archived": bool(row.get("isArchived")),
+            "slug": row.get("slug"),
+            "link": channel_link(row),
+            "icon": icon_out(row.get("icon")),
+        }
+        for row in rows
+        if isinstance(row, dict)
     ]
 
 
@@ -71,13 +176,25 @@ def list_channels(
 def get_channel(channel_id: str, workspace_id: str) -> dict:
     """Get full channel details by ID (includes categories and heading content).
 
+    Also the channel's link (slug and the full srgplus.com link), its icon (None: the plain
+    "#"), and per category its `settings` in the words update_category_settings takes
+    (pinned, view grid/list/scroll, card_size, open_view, cover_ratio, notifications, ...).
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
-    return (
-        get_client()
-        .channels.get(channel_id, workspace_id=workspace_id)
-        .model_dump(mode="json")
-    )
+    from srg.schemas.channel import HubProfileChannelV2
+
+    raw = _channel(channel_id, workspace_id)
+    out = HubProfileChannelV2.model_validate(raw).model_dump(mode="json")
+    settings = {str(c.get("id")): settings_of(c) for c in raw.get("categories") or []}
+    for category in out.get("categories") or []:
+        category["settings"] = settings.get(str(category.get("id")))
+    return {
+        **out,
+        "is_archived": bool(raw.get("isArchived")),
+        "slug": raw.get("slug"),
+        "link": channel_link(raw),
+        "icon": icon_out(raw.get("icon")),
+    }
 
 
 @mcp.tool(
@@ -149,29 +266,48 @@ def update_channel(
     name: str,
     workspace_id: str,
     privacy: str | None = None,
-    categories: list[dict] | None = None,
+    categories: list[Any] | None = None,
 ) -> dict | None:
-    """Update a channel's name, privacy, and category order.
+    """Update a channel's name, privacy and category order in one call.
 
+    Prefer the one-thing tools: rename_channel (name), reorder_categories (order),
+    set_channel_icon / set_channel_slug (look). Here the name is always written (pass the
+    current one to keep it); privacy and the category order change only when passed, and
+    every category keeps its archive state.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     privacy: "Public" or "Private"
-    categories: list of {"id": "...", "order": 0} to reorder categories
+    categories: the categories in the new order: ids, or {"id": "...", "order": 0} objects
+        (sorted by order). Listed ones come first, the others keep their order after them.
     """
-    from srg.schemas.channel import CategoryToReorder
-
-    cat_objs = (
-        [CategoryToReorder(id=c["id"], order=c.get("order")) for c in categories]
-        if categories
-        else None
-    )
-    return get_client().channels.update(
-        channel_id=channel_id,
-        hub_profile_id=hub_profile_id,
-        name=name,
-        privacy=privacy,  # type: ignore[arg-type]
-        categories=cat_objs,
-        workspace_id=workspace_id,
-    )
+    channel = _channel(channel_id, workspace_id)
+    stored = channel.get("categories") or []
+    active = [c for c in stored if not c.get("isArchived")]
+    archived = [c for c in stored if c.get("isArchived")]
+    ids = {str(c["id"]).lower(): c["id"] for c in active}
+    if categories:
+        entries = [c if isinstance(c, dict) else {"id": c} for c in categories]
+        if any("order" in e and e["order"] is not None for e in entries):
+            entries = sorted(entries, key=lambda e: (e.get("order") is None, e.get("order") or 0))
+        listed = [str(e.get("id") or e.get("categoryId") or "").strip().lower() for e in entries]
+        unknown = [i for i in listed if i not in ids]
+        if unknown:
+            raise ValueError(
+                f"Not active categories of this channel: {', '.join(unknown)}. get_channel lists them."
+            )
+        wanted = list(dict.fromkeys(ids[i] for i in listed))
+    else:
+        wanted = []
+    order = wanted + [c["id"] for c in active if c["id"] not in wanted]
+    body: dict[str, Any] = {
+        "channelId": channel["id"],
+        "hubProfileId": hub_profile_id,
+        "name": name,
+        "categories": [{"categoryId": i, "isArchived": False} for i in order]
+        + [{"categoryId": c["id"], "isArchived": True} for c in archived],
+    }
+    if privacy is not None:
+        body["privacy"] = privacy
+    return _raw.call(workspace_id, "PUT", "/api/v1/channels", json=body)
 
 
 @mcp.tool(
@@ -185,10 +321,12 @@ def update_channel(
 )
 def rename_channel(channel_id: str, name: str, workspace_id: str) -> str:
     """Rename a channel. ONLY the name changes: its categories (order and
-    archive state), privacy and everything else keep their values.
+    archive state), privacy, icon and everything else keep their values.
 
     name: the new name, 1-50 characters, no `/` or `\\`, unique within the
-        hub (a taken name fails with 409).
+        hub (a taken name fails with 409). Emoji are fine.
+    The channel's link (slug) follows the new name unless it was set by hand
+    (set_channel_slug); the old link keeps working.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
     """
     _raw.call(
@@ -296,56 +434,56 @@ def create_category(
     notifications_enabled: bool = True,
     view_type: str | None = None,
     progression_enabled: bool = False,
-    cover_show: bool = True,
+    cover_show: bool | None = None,
     expandable: bool = True,
     sections: list[dict] | None = None,
+    card_size: str | None = None,
+    open_view: str | None = None,
+    cover_ratio: str | None = None,
 ) -> str:
     """Create a new category inside a channel. Returns the new category ID.
 
     workspace_id: target workspace ID — get available IDs from list_workspaces()
-    view_type: display view type (e.g. "Grid", "List")
+    is_pinned: pin it to the top of the channel (the channel's other pinned category is unpinned)
+    view_type: how it shows on the channel page: "grid", "list" or "scroll" (default: scroll,
+        a horizontal row of cards)
+    card_size: "large" (default) or "small" cards, for the grid and list views
+    open_view: how it shows when opened (See all): "grid" (default) or "list"
+    cover_ratio: card cover shape, width:height: "16:9", "9:16", "3:2", "2:3", "5:4", "4:5",
+        "square" or "original" (default)
     progression_enabled: track user completion progress
-    cover_show: show cover images in this category
-    expandable: allow the category to be collapsed
+    expandable: allow the category to be opened (enlarged)
+    cover_show: no longer used (covers always show); ignored
     sections: list of {"name": "...", "type": "...", "reference_ids": [...]} for initial sections
+    Change any of these later with update_category_settings.
     """
-    from srg.schemas.channel import (
-        ChannelCategoryOptionsUpsert,
-        CoverOptionsUpsert,
-        ProgressionOptionsUpsert,
-        SectionBaseCreate,
-        ViewOptionsUpsert,
+    options = with_changes(
+        None,
+        view=view_type or None,
+        card_size=card_size,
+        open_view=open_view,
+        cover_ratio=cover_ratio,
+        progression=bool(progression_enabled),
+        expandable=bool(expandable),
     )
-
-    opts = ChannelCategoryOptionsUpsert(
-        view=ViewOptionsUpsert(type=view_type),
-        progression=ProgressionOptionsUpsert(enabled=progression_enabled),
-        cover=CoverOptionsUpsert(show=cover_show),
-        expandable=expandable,
-    )
-    sec_objs = (
-        [
-            SectionBaseCreate.model_validate(
-                {
-                    "$type": s.get("type", "Default"),
-                    "name": s["name"],
-                    "referenceIds": s.get("reference_ids", []),
-                }
-            )
-            for s in sections
-        ]
-        if sections
-        else None
-    )
-    return get_client().channels.create_category(
-        channel_id,
-        name=name,
-        is_pinned=is_pinned,
-        notifications_enabled=notifications_enabled,
-        options=opts,
-        sections=sec_objs,
-        workspace_id=workspace_id,
-    )
+    body = {
+        "name": name,
+        "isPinned": bool(is_pinned),
+        "notificationsEnabled": bool(notifications_enabled),
+        "options": options,
+        "sections": [
+            {
+                "$type": s.get("type", "Default"),
+                "name": s["name"],
+                "referenceIds": s.get("reference_ids", []),
+            }
+            for s in sections or []
+        ],
+    }
+    data = _raw.call(workspace_id, "POST", f"/api/v1/channels/{channel_id}/categories", json=body)
+    if isinstance(data, dict):
+        return data.get("id", "")
+    return str(data or "")
 
 
 @mcp.tool(
@@ -361,43 +499,42 @@ def update_category(
     category_id: str,
     name: str,
     workspace_id: str,
-    is_pinned: bool = False,
-    notifications_enabled: bool = True,
+    is_pinned: bool | None = None,
+    notifications_enabled: bool | None = None,
     view_type: str | None = None,
-    progression_enabled: bool = False,
-    cover_show: bool = True,
-    expandable: bool = True,
-) -> dict | None:
-    """Update a category's name, pin status, notification settings, and display options.
+    progression_enabled: bool | None = None,
+    cover_show: bool | None = None,
+    expandable: bool | None = None,
+) -> dict:
+    """Update a category's name, pin status, notifications and display options.
 
+    Prefer update_category_settings (any setting, nothing else changes) and rename_category.
+    Here the name is always written (pass the current one to keep it); every other field
+    changes only when passed and otherwise keeps its stored value.
     workspace_id: target workspace ID — get available IDs from list_workspaces()
-    view_type: display view type (e.g. "Grid", "List")
+    view_type: "grid", "list" or "scroll"
     progression_enabled: track user completion progress
-    cover_show: show cover images in this category
-    expandable: allow the category to be collapsed
+    expandable: allow the category to be opened (enlarged)
+    cover_show: no longer used (covers always show); ignored
+    Returns the category's settings after the change.
     """
-    from srg.schemas.channel import (
-        ChannelCategoryOptionsUpsert,
-        CoverOptionsUpsert,
-        ProgressionOptionsUpsert,
-        ViewOptionsUpsert,
-    )
-
-    opts = ChannelCategoryOptionsUpsert(
-        view=ViewOptionsUpsert(type=view_type),
-        progression=ProgressionOptionsUpsert(enabled=progression_enabled),
-        cover=CoverOptionsUpsert(show=cover_show),
+    category = _category(_channel(channel_id, workspace_id), category_id)
+    options = with_changes(
+        category.get("options"),
+        view=view_type or None,
+        progression=progression_enabled,
         expandable=expandable,
     )
-    return get_client().channels.update_category(
+    sent = write_category(
         channel_id,
-        category_id,
+        category,
+        workspace_id,
         name=name,
-        is_pinned=is_pinned,
-        notifications_enabled=notifications_enabled,
-        options=opts,
-        workspace_id=workspace_id,
+        pinned=is_pinned,
+        notifications=notifications_enabled,
+        options=options,
     )
+    return settings_after(category, sent)
 
 
 @mcp.tool(

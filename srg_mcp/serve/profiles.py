@@ -17,16 +17,19 @@ edit a hub profile (bio, links, avatar, cover) with PATCH semantics and its
 widgets one at a time (add / change / fill a content widget / remove /
 reorder, the others stay as stored), create a
 new hub with its channels and categories, rename a channel or category
-(PATCH: only the name changes), the brand context (index + memory
+(PATCH: only the name changes), a channel's icon and link and the order of
+channels and categories, a category's settings (pin, Grid / List / Scroll
+view, card size, covers, notifications; only what is passed changes), the
+brand context (index + memory
 page), reversible archive/restore, Drive file clean-up (archive → restore
 or permanent delete, the same as the app's Drive bin), and the permanent
 delete of an archived channel or category (its contents stay, SRGDEV-921), and
 the ready-made preset covers (list + apply, SRGDEV-940).
 Excluded on purpose: user/permission management, hard deletes of hubs and
 contents, moves, the
-low-level collection subcontent tools, workspace actions, the full-replace
-``update_channel`` / ``update_category``, and the deprecated ``create_*_asset``
-registrars.
+low-level collection subcontent tools, workspace actions, the all-in-one
+``update_channel`` / ``update_category`` (the one-thing tools above cover them), and
+the deprecated ``create_*_asset`` registrars.
 """
 
 from __future__ import annotations
@@ -77,17 +80,24 @@ CORE_TOOL_NAMES: tuple[str, ...] = (
     "remove_hub_profile_widget",
     "reorder_hub_profile_widgets",
     # Structure: a new hub, then its channels, then their categories (SRGDEV-850).
-    # CREATE ONLY. update_channel / update_category stay on the full /mcp until
-    # they keep the fields a caller leaves out: the backend PUT replaces the
-    # whole object (a category's isPinned / notificationsEnabled reset to the
-    # defaults; a channel's categories list must name every category, archived
-    # ones included).
     "create_hub_profile",
     "create_channel",
     "create_category",
     # Rename only (PATCH, SRGDEV-827): the name changes, nothing else resets.
     "rename_channel",
     "rename_category",
+    # The apps' Edit Channel / Edit Category, one thing at a time: icon and link
+    # (SRGDEV-948/805b), the order of channels and categories, a category's pin,
+    # view (Grid / List / Scroll), card size, covers and notifications. The
+    # backend category PUT replaces the whole category, so these read it first
+    # and send every other field back as stored. The all-in-one update_channel /
+    # update_category stay on the full /mcp.
+    "set_channel_icon",
+    "remove_channel_icon",
+    "set_channel_slug",
+    "reorder_channels",
+    "reorder_categories",
+    "update_category_settings",
     # Media from the user's computer (no base64) + covers + Drive (SRGDEV-741)
     "create_upload",
     "complete_upload",

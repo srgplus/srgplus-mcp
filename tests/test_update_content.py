@@ -384,3 +384,75 @@ def test_remove_content_from_categories_sends_only_the_listed_categories(monkeyp
 
     with pytest.raises(ValueError):
         contents.remove_content_from_categories("c1", "ch1", [], "ws-1")
+
+
+# --------------------------------------------------------------------------
+# Action buttons and taking the main asset off (PATCH, SRGDEV-760)
+# --------------------------------------------------------------------------
+
+
+def test_action_buttons_short_form_becomes_the_api_shape(raw: _Recorder, sdk) -> None:
+    contents.update_content(
+        CONTENT_ID,
+        WS_ID,
+        action_buttons=[
+            {"title": "Buy", "url": "shop.example/item"},
+            {"title": " Watch ", "asset_id": "65f0000000000000000000b1"},
+            {"title": "Apply", "form_id": "form-1"},
+        ],
+    )
+
+    (call,) = raw.calls
+    assert call["method"] == "PATCH"
+    assert call["json"] == {
+        "actionButtons": [
+            {"title": "Buy", "logic": {"$type": "OpenLink", "url": "https://shop.example/item"}},
+            {"title": "Watch", "logic": {"$type": "Media", "assetId": "65f0000000000000000000b1"}},
+            {"title": "Apply", "logic": {"$type": "OpenForm", "formId": "form-1"}},
+        ]
+    }
+    for button in call["json"]["actionButtons"]:
+        assert next(iter(button["logic"])) == "$type"
+
+
+def test_action_buttons_read_back_shape_is_sent_again_as_is(raw: _Recorder, sdk) -> None:
+    read = [{"title": "Site", "logic": {"url": "https://brand.example", "$type": "OpenLink"}}]
+
+    contents.update_content(CONTENT_ID, WS_ID, action_buttons=read)
+
+    assert raw.calls[0]["json"]["actionButtons"] == [
+        {"title": "Site", "logic": {"$type": "OpenLink", "url": "https://brand.example"}}
+    ]
+
+
+def test_empty_action_buttons_remove_them_all(raw: _Recorder, sdk) -> None:
+    result = contents.update_content(CONTENT_ID, WS_ID, action_buttons=[])
+
+    assert raw.calls[0]["json"] == {"actionButtons": []}
+    assert result["updated_fields"] == ["actionButtons"]
+
+
+@pytest.mark.parametrize(
+    "buttons,match",
+    [
+        ([{"title": "a", "url": "https://a.example"}] * 4, "At most 3"),
+        ([{"url": "https://a.example"}], "needs a title"),
+        ([{"title": "Buy"}], "exactly one of url, asset_id or form_id"),
+        ([{"title": "Buy", "url": "https://a.example", "form_id": "f"}], "exactly one"),
+        ([{"title": "Buy", "logic": {"$type": "Call", "phone": "1"}}], "OpenLink"),
+        ("Buy", "must be a list"),
+    ],
+)
+def test_bad_action_buttons_fail_before_any_call(raw: _Recorder, sdk, buttons, match) -> None:
+    with pytest.raises(ValueError, match=match):
+        contents.update_content(CONTENT_ID, WS_ID, action_buttons=buttons)
+    assert raw.calls == []
+
+
+def test_clear_main_asset(raw: _Recorder, sdk) -> None:
+    contents.update_content(CONTENT_ID, WS_ID, clear_main_asset=True)
+
+    assert raw.calls[0]["json"] == {"clearMainAsset": True}
+
+    with pytest.raises(ValueError, match="not both"):
+        contents.update_content(CONTENT_ID, WS_ID, clear_main_asset=True, main_asset_id="65f0000000000000000000b1")

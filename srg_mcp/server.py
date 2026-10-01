@@ -3,6 +3,7 @@ from srg_mcp._app import mcp
 import srg_mcp.hub_profiles  # noqa: F401
 import srg_mcp.hub_widgets  # noqa: F401
 import srg_mcp.channels  # noqa: F401
+import srg_mcp.channel_settings  # noqa: F401
 import srg_mcp.contents  # noqa: F401
 import srg_mcp.featured  # noqa: F401
 import srg_mcp.assets  # noqa: F401

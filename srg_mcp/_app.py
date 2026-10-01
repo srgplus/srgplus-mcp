@@ -83,6 +83,11 @@ Pitfalls that cause real damage — read before writing:
   Do not reset all placements with update_content(channels=...) and re-add them.
 - Renaming a category or channel: rename_category / rename_channel (only the name changes).
   Never create a new category and move the contents just to rename one.
+- A channel's icon (SF Symbol, emoji or photo on a colour) and link: set_channel_icon /
+  remove_channel_icon, set_channel_slug. Order: reorder_channels, reorder_categories. A
+  category's pin, view (grid / list / scroll), card size, open view, cover shape, progression
+  and notifications: update_category_settings. Each changes only what is passed;
+  get_channel shows the icon, the link and every category's settings in the same words.
 - Removing Drive files: archive_drive_files (to the bin, reversible; restore_drive_files undoes
   it) then delete_drive_files (permanent, frees storage; only archived files, or pass
   archive_first=True for one step). list_drive_files(archived=True) lists the bin. Confirm the
